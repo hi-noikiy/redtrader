@@ -1,2 +1,3 @@
-# trader
-Trading Basic Library
+# redtrader
+
+Basic Trading Library
