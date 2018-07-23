@@ -70,15 +70,17 @@ class CandleLite (object):
 	def __open (self):
 		sql = '''
 		CREATE TABLE IF NOT EXISTS "{name}" (
+			"id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
 			"ts" INTEGER DEFAULT(0) NOT NULL,
 			"symbol" VARCHAR(16) NOT NULL,
 			"open" REAL DEFAULT(0),
 			"high" REAL DEFAULT(0),
 			"low" REAL DEFAULT(0),
 			"close" REAL DEFAULT(0),
-			"volume" REAL DEFAULT(0), 
-			PRIMARY KEY (ts, symbol)
+			"volume" REAL DEFAULT(0)
 		);
+		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
+		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_2" ON {name} (symbol, ts);
 		CREATE INDEX IF NOT EXISTS "{name}_3" ON {name} (ts);
 		CREATE INDEX IF NOT EXISTS "{name}_4" ON {name} (symbol);
 		'''
@@ -105,7 +107,7 @@ class CandleLite (object):
 		self.__conn.executescript(sql)
 		self.__conn.commit()
 
-		fields = ('ts', 'symbol', 'open', 'high', 'low', 'close', 'volume')
+		fields = ('id', 'ts', 'symbol', 'open', 'high', 'low', 'close', 'volume')
 		self.__fields = tuple([(fields[i], i) for i in range(len(fields))])
 		self.__names = {}
 		for k, v in self.__fields:
