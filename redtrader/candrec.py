@@ -77,7 +77,8 @@ class CandleLite (object):
 			"high" REAL DEFAULT(0),
 			"low" REAL DEFAULT(0),
 			"close" REAL DEFAULT(0),
-			"volume" REAL DEFAULT(0)
+			"volume" REAL DEFAULT(0),
+			CONSTRAINT 'ukey' UNIQUE (ts, symbol)
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_2" ON {name} (symbol, ts);
@@ -85,7 +86,6 @@ class CandleLite (object):
 		CREATE INDEX IF NOT EXISTS "{name}_4" ON {name} (symbol);
 		'''
 
-		# CREATE UNIQUE INDEX IF NOT EXISTS "{name}_2" ON {name} (ts, symbol);
 		self.__conn = sqlite3.connect(self.__dbname, isolation_level = "IMMEDIATE")
 		self.__conn.isolation_level = "IMMEDIATE"
 
@@ -115,6 +115,23 @@ class CandleLite (object):
 		self.__enable = self.__fields[3:]
 
 		return 0
+
+	def close (self):
+		if self.__conn:
+			self.__conn.close()
+		self.__conn = None
+
+	def __del__ (self):
+		self.close()
+
+	def out (self, text):
+		if self.__verbose:
+			print(text)
+		return True
+
+	def query (self, symbol, ts, limit = 100):
+		rec = []
+		return rec
 
 
 #----------------------------------------------------------------------
