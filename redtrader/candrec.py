@@ -110,13 +110,6 @@ class CandleLite (object):
 		self.__conn.executescript(sql)
 		self.__conn.commit()
 
-		fields = ('id', 'ts', 'symbol', 'open', 'high', 'low', 'close', 'volume')
-		self.__fields = tuple([(fields[i], i) for i in range(len(fields))])
-		self.__names = {}
-		for k, v in self.__fields:
-			self.__names[k] = v
-		self.__enable = self.__fields[3:]
-
 		tabnames = {}
 		tabnames['1'] = 'candle_1'
 		tabnames['5'] = 'candle_5'
@@ -250,9 +243,138 @@ class CandleLite (object):
 
 
 #----------------------------------------------------------------------
+# CandleDB
+#----------------------------------------------------------------------
+class CandleDB (object):
+
+	def __init__ (self, desc, init = False, timeout = 10, verbose = False):
+		self.__argv = {}
+		self.__uri = {}
+		if isinstance(desc, dict):
+			argv = desc
+		else:
+			argv = self.__url_parse(desc)
+		for k, v in argv.items():
+			self.__argv[k] = v
+			if k not in ('engine', 'init', 'db', 'verbose'):
+				self.__uri[k] = v
+		self.__uri['connect_timeout'] = timeout
+		self.__conn = None
+		self.__verbose = verbose
+		self.__init = init
+		if 'db' not in argv:
+			raise KeyError('not find db name')
+		self.__open()
+
+	def __mysql_startup (self):
+		global MySQLdb
+		if MySQLdb is not None:
+			return True
+		try:
+			import MySQLdb as _mysql
+			MySQLdb = _mysql
+		except ImportError:
+			return False
+		return True
+
+	def __open (self):
+		self.__mysql_startup()
+		if MySQLdb is None:
+			raise ImportError('No module named MySQLdb')
+		self.__dbname = self.__argv.get('db', 'CandleDB')
+		if not self.__init:
+			uri = {}
+			for k, v in self.__uri.items():
+				uri[k] = v
+			uri['db'] = self.__dbname
+			self.__conn = MySQLdb.connect(**uri)
+		else:
+			self.__conn = MySQLdb.connect(**self.__uri)
+			return self.init()
+		return True
+
+	# 输出日志
+	def out (self, text):
+		if self.__verbose:
+			print(text)
+		return True
+
+	# 初始化数据库与表格
+	def init (self):
+		database = self.__argv.get('db', 'CandleDB')
+		self.out('create database: %s'%database)
+		self.__conn.query('SET sql_notes = 0;')
+		self.__conn.query('CREATE DATABASE IF NOT EXISTS %s;'%database)
+		self.__conn.query('USE %s;'%database)
+		sql = '''
+			CREATE TABLE IF NOT EXISTS `%s`.`{name}` (
+			`id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+			`ts` INT UNSIGNED DEFAULT 0,
+			`symbol` VARCHAR(16) NOT NULL,
+			`open` DOUBLE DEFAULT 0,
+			`high` DOUBLE DEFAULT 0,
+			`low` DOUBLE DEFAULT 0,
+			`close` DOUBLE DEFAULT 0,
+			`volume` DOUBLE DEFAULT 0,
+			UNIQUE KEY `tssym` (`ts`, `symbol`),
+			UNIQUE KEY `symts` (`symbol`, `ts`),
+			KEY(`ts`),
+			KEY(`symbol`)
+			)
+		'''%(database)
+
+		sql = '\n'.join([ n.strip('\t') for n in sql.split('\n') ])
+		sql = sql.strip('\n')
+		sql += ' ENGINE=MyISAM DEFAULT CHARSET=utf8;'
+
+		self.__conn.query(sql.replace('{name}', 'candle_1'))
+		self.__conn.query(sql.replace('{name}', 'candle_5'))
+		self.__conn.query(sql.replace('{name}', 'candle_15'))
+		self.__conn.query(sql.replace('{name}', 'candle_30'))
+		self.__conn.query(sql.replace('{name}', 'candle_60'))
+		self.__conn.query(sql.replace('{name}', 'candle_d'))
+		self.__conn.query(sql.replace('{name}', 'candle_w'))
+		self.__conn.query(sql.replace('{name}', 'candle_m'))
+		self.__conn.commit()
+
+		return True
+
+	# 读取 mysql://user:passwd@host:port/database
+	def __url_parse (self, url):
+		if url[:8] != 'mysql://':
+			return None
+		url = url[8:]
+		obj = {}
+		part = url.split('/')
+		main = part[0]
+		p1 = main.find('@')
+		if p1 >= 0:
+			text = main[:p1].strip()
+			main = main[p1 + 1:]
+			p1 = text.find(':')
+			if p1 >= 0:
+				obj['user'] = text[:p1].strip()
+				obj['passwd'] = text[p1 + 1:].strip()
+			else:
+				obj['user'] = text
+		p1 = main.find(':')
+		if p1 >= 0:
+			port = main[p1 + 1:]
+			main = main[:p1]
+			obj['port'] = int(port)
+		main = main.strip()
+		if not main:
+			main = 'localhost'
+		obj['host'] = main.strip()
+		if len(part) >= 2:
+			obj['db'] = part[1]
+		return obj
+
+#----------------------------------------------------------------------
 # testing case
 #----------------------------------------------------------------------
 if __name__ == '__main__':
+	my = {'host':'127.0.0.1', 'user':'skywind', 'passwd':'000000', 'db':'skywind_t2'}
 	def test1():
 		c = CandleStick(1, 2, 3, 4, 5, 100)
 		print(c)
@@ -293,9 +415,15 @@ if __name__ == '__main__':
 		print('time', time.time() - t1)
 		print(cc.read_first('ETH/USDT'))
 		print(cc.read_last('ETH/USDT'))
+		print()
+		for n in cc.read('ETH/USDT', 10, 20):
+			print(n)
+		return 0
+	def test4():
+		cc = CandleDB(my, init = True)
 		return 0
 
-	test3()
+	test4()
 
 
 
