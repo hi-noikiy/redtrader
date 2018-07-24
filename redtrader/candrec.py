@@ -84,7 +84,9 @@ class CandleStick (object):
 class CandleLite (object):
 
 	def __init__ (self, filename, verbose = False):
-		self.__dbname = os.path.abspath(filename)
+		self.__dbname = filename
+		if filename != ':memory:':
+			os.path.abspath(filename)
 		self.__conn = None
 		self.verbose = verbose
 		self.decimal = True
@@ -514,6 +516,20 @@ class CandleDB (object):
 
 
 #----------------------------------------------------------------------
+# connect
+#----------------------------------------------------------------------
+def connect(uri):
+	head = 'sqlite://'
+	if uri.startswith(head):
+		cc = CandleLite(uri[len(head):])
+	elif uri.startswith('mysql://'):
+		cc = CandleDB(uri)
+	else:
+		cc = CandleLite(uri)
+	return cc
+
+
+#----------------------------------------------------------------------
 # testing case
 #----------------------------------------------------------------------
 if __name__ == '__main__':
@@ -540,6 +556,7 @@ if __name__ == '__main__':
 			records1.append(CandleStick(i))
 			records2.append(CandleStick(1000000 + i))
 		cc = CandleLite('candrec.db')
+		# cc = CandleLite(':memory:')
 		print(cc.uri)
 		print('remove')
 		cc.delete_all('ETH/USDT')
