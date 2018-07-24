@@ -107,7 +107,7 @@ class CandleLite (object):
 			"low" DECIMAL(32, 16) DEFAULT(0),
 			"close" DECIMAL(32, 16) DEFAULT(0),
 			"volume" DECIMAL(32, 16) DEFAULT(0),
-			CONSTRAINT 'ukey' UNIQUE (ts, symbol)
+			CONSTRAINT 'tssym' UNIQUE (ts, symbol)
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_2" ON {name} (symbol, ts);
@@ -131,6 +131,29 @@ class CandleLite (object):
 		sqls.append(sql.replace('{name}', 'candle_d'))
 		sqls.append(sql.replace('{name}', 'candle_w'))
 		sqls.append(sql.replace('{name}', 'candle_m'))
+
+		sql = '''
+		CREATE TABLE IF NOT EXISTS "{name}" (
+			"id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
+			"ts" INTEGER DEFAULT(0) NOT NULL,
+			"symbol" VARCHAR(16) NOT NULL,
+			"data" TEXT,
+			CONSTRAINT 'tssym' UNIQUE (ts, symbol)
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
+		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_2" ON {name} (symbol, ts);
+		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_3" ON {name} (symbol, ts desc);
+		CREATE INDEX IF NOT EXISTS "{name}_4" ON {name} (ts);
+		CREATE INDEX IF NOT EXISTS "{name}_5" ON {name} (symbol);
+		'''
+
+		sql = '\n'.join([ n.strip('\t') for n in sql.split('\n') ])
+		sql = sql.strip('\n')
+
+		sqls.append(sql.replace('{name}', 'tick_1'))
+		sqls.append(sql.replace('{name}', 'tick_2'))
+		sqls.append(sql.replace('{name}', 'tick_3'))
+		sqls.append(sql.replace('{name}', 'tick_4'))
 
 		sql = '\n\n'.join(sqls)
 
@@ -352,8 +375,8 @@ class CandleDB (object):
 		self.__conn.query('USE %s;'%database)
 		sql = '''
 			CREATE TABLE IF NOT EXISTS `%s`.`{name}` (
-			`id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
-			`ts` INT UNSIGNED DEFAULT 0,
+			`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+			`ts` BIGINT UNSIGNED DEFAULT 0,
 			`symbol` VARCHAR(16) NOT NULL,
 			`open` DECIMAL(32, 16) DEFAULT 0,
 			`high` DECIMAL(32, 16) DEFAULT 0,
@@ -379,6 +402,29 @@ class CandleDB (object):
 		self.__conn.query(sql.replace('{name}', 'candle_d'))
 		self.__conn.query(sql.replace('{name}', 'candle_w'))
 		self.__conn.query(sql.replace('{name}', 'candle_m'))
+
+		sql = '''
+			CREATE TABLE IF NOT EXISTS `%s`.`{name}` (
+			`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+			`ts` BIGINT UNSIGNED DEFAULT 0,
+			`symbol` VARCHAR(16) NOT NULL,
+			`data` TEXT,
+			UNIQUE KEY `tssym` (`ts`, `symbol`),
+			UNIQUE KEY `symts` (`symbol`, `ts`),
+			KEY(`ts`),
+			KEY(`symbol`)
+			)
+		'''%(database)
+
+		sql = '\n'.join([ n.strip('\t') for n in sql.split('\n') ])
+		sql = sql.strip('\n')
+		sql += ' ENGINE=MyISAM DEFAULT CHARSET=utf8;'
+
+		self.__conn.query(sql.replace('{name}', 'tick_1'))
+		self.__conn.query(sql.replace('{name}', 'tick_2'))
+		self.__conn.query(sql.replace('{name}', 'tick_3'))
+		self.__conn.query(sql.replace('{name}', 'tick_4'))
+
 		self.__conn.commit()
 
 		return True
@@ -621,7 +667,7 @@ if __name__ == '__main__':
 			print(n)
 		return 0
 
-	test2()
+	test4()
 
 
 
