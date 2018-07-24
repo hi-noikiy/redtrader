@@ -75,11 +75,11 @@ class CandleLite (object):
 			"id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
 			"ts" INTEGER DEFAULT(0) NOT NULL,
 			"symbol" VARCHAR(16) NOT NULL,
-			"open" REAL DEFAULT(0),
-			"high" REAL DEFAULT(0),
-			"low" REAL DEFAULT(0),
-			"close" REAL DEFAULT(0),
-			"volume" REAL DEFAULT(0),
+			"open" DECIMAL(32, 16) DEFAULT(0),
+			"high" DECIMAL(32, 16) DEFAULT(0),
+			"low" DECIMAL(32, 16) DEFAULT(0),
+			"close" DECIMAL(32, 16) DEFAULT(0),
+			"volume" DECIMAL(32, 16) DEFAULT(0),
 			CONSTRAINT 'ukey' UNIQUE (ts, symbol)
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
@@ -319,11 +319,11 @@ class CandleDB (object):
 			`id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
 			`ts` INT UNSIGNED DEFAULT 0,
 			`symbol` VARCHAR(16) NOT NULL,
-			`open` DOUBLE DEFAULT 0,
-			`high` DOUBLE DEFAULT 0,
-			`low` DOUBLE DEFAULT 0,
-			`close` DOUBLE DEFAULT 0,
-			`volume` DOUBLE DEFAULT 0,
+			`open` DECIMAL(32, 16) DEFAULT 0,
+			`high` DECIMAL(32, 16) DEFAULT 0,
+			`low` DECIMAL(32, 16) DEFAULT 0,
+			`close` DECIMAL(32, 16) DEFAULT 0,
+			`volume` DECIMAL(32, 16) DEFAULT 0,
 			UNIQUE KEY `tssym` (`ts`, `symbol`),
 			UNIQUE KEY `symts` (`symbol`, `ts`),
 			KEY(`ts`),
@@ -487,13 +487,7 @@ class CandleDB (object):
 if __name__ == '__main__':
 	my = {'host':'127.0.0.1', 'user':'skywind', 'passwd':'000000', 'db':'skywind_t2'}
 	def test1():
-		c = CandleStick(1, 2, 3, 4, 5, 100)
-		print(c)
-		cl = CandleLite('test.db')
-		print(cl.read('ETH/USDT', 0, 0xffffffff))
-		return 0
-	def test2():
-		cc = CandleLite('test.db')
+		cc = CandleLite('candrec.db')
 		cc.verbose(True)
 		cc.delete_all('ETH/USDT')
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
@@ -507,13 +501,13 @@ if __name__ == '__main__':
 		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
 		return 0
-	def test3():
+	def test2():
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
 			records1.append(CandleStick(i))
 			records2.append(CandleStick(1000000 + i))
-		cc = CandleLite('test.db')
+		cc = CandleLite('candrec.db')
 		print('remove')
 		cc.delete_all('ETH/USDT')
 		print('begin')
@@ -532,7 +526,7 @@ if __name__ == '__main__':
 		for n in cc.read('ETH/USDT', 10, 20):
 			print(n)
 		return 0
-	def test4():
+	def test3():
 		cc = CandleDB(my, init = True)
 		cc.verbose(True)
 		cc.delete_all('ETH/USDT')
@@ -547,8 +541,34 @@ if __name__ == '__main__':
 		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
 		return 0
+	def test4():
+		records1 = []
+		records2 = []
+		for i in xrange(10000):
+			records1.append(CandleStick(i))
+			records2.append(CandleStick(1000000 + i))
+		# cc = CandleLite('test.db')
+		cc = CandleDB(my, init = True)
+		print('remove')
+		cc.delete_all('ETH/USDT')
+		print('begin')
+		t1 = time.time()
+		for rec in records1:
+			cc.write('ETH/USDT', rec, commit = True)
+		print('time', time.time() - t1)
+		t1 = time.time()
+		for rec in records2:
+			cc.write('ETH/USDT', rec, commit = False)
+		cc.commit()
+		print('time', time.time() - t1)
+		print(cc.read_first('ETH/USDT'))
+		print(cc.read_last('ETH/USDT'))
+		print()
+		for n in cc.read('ETH/USDT', 10, 20):
+			print(n)
+		return 0
 
-	test4()
+	test3()
 
 
 
