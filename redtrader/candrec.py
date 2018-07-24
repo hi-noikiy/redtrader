@@ -423,6 +423,8 @@ class CandleDB (object):
 			c.execute(sql, (symbol, start, end))
 			for obj in c.fetchall():
 				cs = CandleStick(*obj)
+				if not self.decimal:
+					cs.decimal(False)
 				record.append(cs)
 		return record
 
@@ -435,7 +437,10 @@ class CandleDB (object):
 			record = c.fetchone()
 		if record is None:
 			return None
-		return CandleStick(*record)
+		cs = CandleStick(*record)
+		if not self.decimal:
+			cs.decimal(False)
+		return cs
 
 	def read_last (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
@@ -446,7 +451,10 @@ class CandleDB (object):
 			record = c.fetchone()
 		if record is None:
 			return None
-		return CandleStick(*record)
+		cs = CandleStick(*record)
+		if not self.decimal:
+			cs.decimal(False)
+		return cs
 
 	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
 		tabname = self.__get_table_name(mode)
