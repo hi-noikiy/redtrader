@@ -82,8 +82,9 @@ class CandleLite (object):
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_2" ON {name} (symbol, ts);
-		CREATE INDEX IF NOT EXISTS "{name}_3" ON {name} (ts);
-		CREATE INDEX IF NOT EXISTS "{name}_4" ON {name} (symbol);
+		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_3" ON {name} (symbol, ts desc);
+		CREATE INDEX IF NOT EXISTS "{name}_4" ON {name} (ts);
+		CREATE INDEX IF NOT EXISTS "{name}_5" ON {name} (symbol);
 		'''
 
 		self.__conn = sqlite3.connect(self.__dbname, isolation_level = "IMMEDIATE")
@@ -93,14 +94,14 @@ class CandleLite (object):
 		sql = sql.strip('\n')
 
 		sqls = []
-		sqls.append(sql.replace('{name}', 'candle_1m'))
-		sqls.append(sql.replace('{name}', 'candle_5m'))
-		sqls.append(sql.replace('{name}', 'candle_15m'))
-		sqls.append(sql.replace('{name}', 'candle_30m'))
-		sqls.append(sql.replace('{name}', 'candle_60m'))
-		sqls.append(sql.replace('{name}', 'candle_1d'))
-		sqls.append(sql.replace('{name}', 'candle_1w'))
-		sqls.append(sql.replace('{name}', 'candle_1m'))
+		sqls.append(sql.replace('{name}', 'candle_1'))
+		sqls.append(sql.replace('{name}', 'candle_5'))
+		sqls.append(sql.replace('{name}', 'candle_15'))
+		sqls.append(sql.replace('{name}', 'candle_30'))
+		sqls.append(sql.replace('{name}', 'candle_60'))
+		sqls.append(sql.replace('{name}', 'candle_d'))
+		sqls.append(sql.replace('{name}', 'candle_w'))
+		sqls.append(sql.replace('{name}', 'candle_m'))
 
 		sql = '\n\n'.join(sqls)
 
@@ -113,6 +114,19 @@ class CandleLite (object):
 		for k, v in self.__fields:
 			self.__names[k] = v
 		self.__enable = self.__fields[3:]
+
+		tabnames = {}
+		tabnames['1'] = 'candle_1'
+		tabnames['5'] = 'candle_5'
+		tabnames['15'] = 'candle_15'
+		tabnames['30'] = 'candle_30'
+		tabnames['60'] = 'candle_60'
+		tabnames['h'] = 'candle_60'
+		tabnames['d'] = 'candle_d'
+		tabnames['w'] = 'candle_w'
+		tabnames['m'] = 'candle_m'
+
+		self.__tabname = tabnames
 
 		return 0
 
@@ -129,9 +143,43 @@ class CandleLite (object):
 			print(text)
 		return True
 
-	def query (self, symbol, ts, limit = 100):
-		rec = []
-		return rec
+	def __get_table_name (self, mode):
+		return self.__tabname[str(mode).lower()]
+
+	def query (self, symbol, start, end, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume '
+		sql += ' from %s where symbol = ? '%tabname
+		sql += ' and ts >= ? and ts < ?;'
+		record = []
+		c = self.__conn.cursor()
+		c.execute(sql, (symbol, start, end))
+		for obj in c.fetchall():
+			cs = CandleStick(*obj)
+			record.append(cs)
+		return record
+
+	def first_candle (self, symbol, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume '
+		sql += ' from %s where symbol = ? order by ts limit 1;'%tabname
+		c = self.__conn.cursor()
+		c.execute(sql, (symbol, ))
+		record = c.fetchone()
+		if record is None:
+			return None
+		return CandleStick(*obj)
+
+	def last_candle (self, symbol, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume '
+		sql += ' from %s where symbol = ? order by ts desc limit 1;'%tabname
+		c = self.__conn.cursor()
+		c.execute(sql, (symbol, ))
+		record = c.fetchone()
+		if record is None:
+			return None
+		return CandleStick(*obj)
 
 
 #----------------------------------------------------------------------
@@ -142,6 +190,7 @@ if __name__ == '__main__':
 		c = CandleStick(1, 2, 3, 4, 5, 100)
 		print(c)
 		cl = CandleLite('test.db')
+		print(cl.query('ETH/USDT', 0, 0xffffffff))
 		return 0
 	test1()
 
