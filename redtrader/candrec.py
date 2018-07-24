@@ -470,11 +470,11 @@ class CandleDB (object):
 
 	def delete_all (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
-		sql = 'DELETE FROM %s WHERE symbol = ?;'%tabname
+		sql = 'DELETE FROM {} WHERE symbol = %s;'.format(tabname)
 		try:
 			with self.__conn as c:
 				c.execute(sql, (symbol, ))
-				c.commit()
+				self.__conn.commit()
 		except MySQLdb.Error as e:
 			self.out(str(e))
 			return False
@@ -499,8 +499,10 @@ if __name__ == '__main__':
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
-		hr = cc.write('ETH/USDT', [c1, c2], rep = True)
-		hr = cc.write('ETH/USDT', [c2, c3], rep = True)
+		hr = cc.write('ETH/USDT', c1, rep = True)
+		hr = cc.write('ETH/USDT', c2, rep = True)
+		hr = cc.write('ETH/USDT', c2, rep = True)
+		hr = cc.write('ETH/USDT', c3, rep = True)
 		print(hr)
 		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
@@ -532,8 +534,17 @@ if __name__ == '__main__':
 		return 0
 	def test4():
 		cc = CandleDB(my, init = True)
-		symbol = 'ETH/USDT'
-		for n in cc.read(symbol, 0, 0xffffffff):
+		cc.verbose(True)
+		cc.delete_all('ETH/USDT')
+		c1 = CandleStick(1, 2, 3, 4, 5, 100)
+		c2 = CandleStick(2, 2, 3, 4, 5, 100)
+		c3 = CandleStick(3, 2, 3, 4, 5, 100)
+		hr = cc.write('ETH/USDT', c1, rep = True)
+		hr = cc.write('ETH/USDT', c2, rep = True)
+		hr = cc.write('ETH/USDT', c2, rep = True)
+		hr = cc.write('ETH/USDT', c3, rep = True)
+		print(hr)
+		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
 		return 0
 
