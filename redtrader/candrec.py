@@ -38,11 +38,11 @@ if sys.version_info[0] >= 3:
 # CandleStick
 #----------------------------------------------------------------------
 class CandleStick (object):
-	def __init__ (self, t = 0, o = 0.0, h = 0.0, l = 0.0, c = 0.0, v = 0):
+	def __init__ (self, t = 0, o = 0.0, hi = 0.0, lo = 0.0, c = 0.0, v = 0):
 		self.ts = t
 		self.open = o
-		self.high = h
-		self.low = l
+		self.high = hi
+		self.low = lo
 		self.close = c
 		self.volume = v
 	def __repr__ (self):
@@ -56,7 +56,6 @@ class CandleStick (object):
 	def record (self):
 		v = self.ts, self.open, self.high, self.low, self.close, self.volume
 		return v
-
 
 
 #----------------------------------------------------------------------
@@ -249,7 +248,6 @@ class CandleLite (object):
 			return False
 		return True
 
-			
 
 #----------------------------------------------------------------------
 # testing case
@@ -275,7 +273,6 @@ if __name__ == '__main__':
 			print(n)
 		return 0
 	def test3():
-		import time
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
@@ -285,14 +282,17 @@ if __name__ == '__main__':
 		cc.delete_all('ETH/USDT')
 		t1 = time.time()
 		for rec in records1:
-			cc.write('ETH/USDT', rec, commit = True)
+			cc.write('ETH/USDT', rec, commit = False)
 		print('time', time.time() - t1)
 		t1 = time.time()
 		for rec in records2:
 			cc.write('ETH/USDT', rec, commit = False)
 		cc.commit()
 		print('time', time.time() - t1)
+		print(cc.read_first('ETH/USDT'))
+		print(cc.read_last('ETH/USDT'))
 		return 0
+
 	test3()
 
 
