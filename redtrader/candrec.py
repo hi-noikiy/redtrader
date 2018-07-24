@@ -110,18 +110,16 @@ class CandleLite (object):
 		self.__conn.executescript(sql)
 		self.__conn.commit()
 
-		tabnames = {}
-		tabnames['1'] = 'candle_1'
-		tabnames['5'] = 'candle_5'
-		tabnames['15'] = 'candle_15'
-		tabnames['30'] = 'candle_30'
-		tabnames['60'] = 'candle_60'
-		tabnames['h'] = 'candle_60'
-		tabnames['d'] = 'candle_d'
-		tabnames['w'] = 'candle_w'
-		tabnames['m'] = 'candle_m'
-
-		self.__tabname = tabnames
+		self.__tabname = {}
+		self.__tabname['1'] = 'candle_1'
+		self.__tabname['5'] = 'candle_5'
+		self.__tabname['15'] = 'candle_15'
+		self.__tabname['30'] = 'candle_30'
+		self.__tabname['60'] = 'candle_60'
+		self.__tabname['h'] = 'candle_60'
+		self.__tabname['d'] = 'candle_d'
+		self.__tabname['w'] = 'candle_w'
+		self.__tabname['m'] = 'candle_m'
 
 		return 0
 
@@ -282,6 +280,16 @@ class CandleDB (object):
 		if MySQLdb is None:
 			raise ImportError('No module named MySQLdb')
 		self.__dbname = self.__argv.get('db', 'CandleDB')
+		self.__tabname = {}
+		self.__tabname['1'] = 'candle_1'
+		self.__tabname['5'] = 'candle_5'
+		self.__tabname['15'] = 'candle_15'
+		self.__tabname['30'] = 'candle_30'
+		self.__tabname['60'] = 'candle_60'
+		self.__tabname['h'] = 'candle_60'
+		self.__tabname['d'] = 'candle_d'
+		self.__tabname['w'] = 'candle_w'
+		self.__tabname['m'] = 'candle_m'
 		if not self.__init:
 			uri = {}
 			for k, v in self.__uri.items():
@@ -370,6 +378,35 @@ class CandleDB (object):
 			obj['db'] = part[1]
 		return obj
 
+	def close (self):
+		if self.__conn:
+			self.__conn.close()
+		self.__conn = None
+
+	def __del__ (self):
+		self.close()
+
+	def verbose (self, verbose):
+		self.__verbose = verbose
+
+	def __get_table_name (self, mode):
+		return self.__tabname[str(mode).lower()]
+
+	def read (self, symbol, start, end, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume '
+		sql += ' from {} where symbol = %s '.format(tabname)
+		sql += ' and ts >= %s and ts < %s order by ts;'
+		record = []
+		with self.__conn as c:
+			c.execute(sql, (symbol, start, end))
+			for obj in c.fetchall():
+				cs = CandleStick(*obj)
+				record.append(cs)
+		return record
+
+
+
 #----------------------------------------------------------------------
 # testing case
 #----------------------------------------------------------------------
@@ -421,6 +458,9 @@ if __name__ == '__main__':
 		return 0
 	def test4():
 		cc = CandleDB(my, init = True)
+		symbol = 'ETH/USDT'
+		for n in cc.read(symbol, 0, 0xffffffff):
+			print(n)
 		return 0
 
 	test4()
