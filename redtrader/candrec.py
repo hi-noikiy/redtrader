@@ -190,37 +190,29 @@ class CandleLite (object):
 			return None
 		return CandleStick(*record)
 
-	def write (self, symbol, candles, mode = 'd', rep = True, commit = True):
+	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
 		tabname = self.__get_table_name(mode)
-		records = []
-		if isinstance(candles, CandleStick):
-			records.append(candles.record())
+		record = None
+		if isinstance(candle, CandleStick):
+			record = candle.record()
+		elif isinstance(candle, tuple):
+			record = candle
 		else:
-			for candle in candles:
-				if isinstance(candle, CandleStick):
-					records.append(candle.record())
-				elif isinstance(candle, list):
-					records.append(tuple(candle))
-				elif isinstance(candle, tuple):
-					records.append(candle)
-
+			record = tuple(candle)
 		symbol = symbol.replace('\'', '').replace('"', '')
 		sql = '%s INTO %s (symbol, ts, open, high, low, close, volume)'
 		sql = sql%(rep and 'REPLACE' or 'INSERT', tabname)
 		sql += " values('%s', ?, ?, ?, ?, ?, ?);"%symbol
-
 		try:
-			self.__conn.executemany(sql, records)
+			self.__conn.execute(sql, record)
 		except sqlite3.InternalError as e:
 			self.out(str(e))
 			return False
 		except sqlite3.Error as e:
 			self.out(str(e))
 			return False
-
 		if commit:
 			self.__conn.commit()
-
 		return True
 
 	def commit (self):
@@ -282,7 +274,26 @@ if __name__ == '__main__':
 		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
 		return 0
-	test2()
+	def test3():
+		import time
+		records1 = []
+		records2 = []
+		for i in xrange(1000):
+			records1.append(CandleStick(i))
+			records2.append(CandleStick(1000000 + i))
+		cc = CandleLite('test.db')
+		cc.delete_all('ETH/USDT')
+		t1 = time.time()
+		for rec in records1:
+			cc.write('ETH/USDT', rec, commit = True)
+		print('time', time.time() - t1)
+		t1 = time.time()
+		for rec in records2:
+			cc.write('ETH/USDT', rec, commit = False)
+		cc.commit()
+		print('time', time.time() - t1)
+		return 0
+	test3()
 
 
 
