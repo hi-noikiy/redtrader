@@ -155,6 +155,18 @@ class CandleLite (object):
 		sqls.append(sql.replace('{name}', 'tick_3'))
 		sqls.append(sql.replace('{name}', 'tick_4'))
 
+		sql = '''
+		CREATE TABLE IF NOT EXISTS "meta" (
+			"name" VARCHAR(16) PRIMARY KEY NOT NULL UNIQUE,
+			"value" TEXT,
+			"ctime" DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),
+			"mtime" DATETIME NOT NULL DEFAULT (datetime('now', 'localtime'))
+		);
+		'''
+
+		sql = '\n'.join([ n.strip('\t') for n in sql.split('\n') ])
+		sqls.append(sql.strip('\n'))
+		
 		sql = '\n\n'.join(sqls)
 
 		self.__conn.executescript(sql)
@@ -425,6 +437,20 @@ class CandleDB (object):
 		self.__conn.query(sql.replace('{name}', 'tick_3'))
 		self.__conn.query(sql.replace('{name}', 'tick_4'))
 
+		sql = '''
+			CREATE TABLE IF NOT EXISTS `%s`.`meta` (
+			`name` VARCHAR(16) PRIMARY KEY NOT NULL UNIQUE,
+			`value` TEXT,
+			`ctime` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
+			`mtime` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00'
+			)
+		'''%(database)
+
+		sql = '\n'.join([ n.strip('\t') for n in sql.split('\n') ])
+		sql = sql.strip('\n')
+		sql += ' ENGINE=InnoDB DEFAULT CHARSET=utf8;'
+
+		self.__conn.query(sql)
 		self.__conn.commit()
 
 		return True
