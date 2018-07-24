@@ -279,7 +279,9 @@ if __name__ == '__main__':
 			records1.append(CandleStick(i))
 			records2.append(CandleStick(1000000 + i))
 		cc = CandleLite('test.db')
+		print('remove')
 		cc.delete_all('ETH/USDT')
+		print('begin')
 		t1 = time.time()
 		for rec in records1:
 			cc.write('ETH/USDT', rec, commit = False)
