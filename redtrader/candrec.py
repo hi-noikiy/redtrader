@@ -146,6 +146,9 @@ class CandleLite (object):
 			print(text)
 		return True
 
+	def verbose (self, verbose):
+		self.__verbose = verbose
+
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
@@ -153,7 +156,7 @@ class CandleLite (object):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
 		sql += ' from %s where symbol = ? '%tabname
-		sql += ' and ts >= ? and ts < ?;'
+		sql += ' and ts >= ? and ts < ? order by ts;'
 		record = []
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, start, end))
@@ -187,7 +190,7 @@ class CandleLite (object):
 			return None
 		return CandleStick(*record)
 
-	def write (self, symbol, candles, mode = 'd', rep = False, commit = True):
+	def write (self, symbol, candles, mode = 'd', rep = True, commit = True):
 		tabname = self.__get_table_name(mode)
 		records = []
 		if isinstance(candles, CandleStick):
@@ -215,9 +218,14 @@ class CandleLite (object):
 			self.out(str(e))
 			return False
 
-		if self.commit:
+		if commit:
 			self.__conn.commit()
 
+		return True
+
+	def commit (self):
+		if self.__conn:
+			self.__conn.commit()
 		return True
 
 	def delete (self, symbol, start, end, mode = 'd', commit = True):
@@ -263,7 +271,16 @@ if __name__ == '__main__':
 		return 0
 	def test2():
 		cc = CandleLite('test.db')
+		cc.verbose(True)
 		cc.delete_all('ETH/USDT')
+		c1 = CandleStick(1, 2, 3, 4, 5, 100)
+		c2 = CandleStick(2, 2, 3, 4, 5, 100)
+		c3 = CandleStick(3, 2, 3, 4, 5, 100)
+		hr = cc.write('ETH/USDT', [c1, c2], rep = True)
+		hr = cc.write('ETH/USDT', [c2, c3], rep = True)
+		print(hr)
+		for n in cc.read('ETH/USDT', 0, 0xffffffff):
+			print(n)
 		return 0
 	test2()
 
