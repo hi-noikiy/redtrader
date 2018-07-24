@@ -53,6 +53,26 @@ class CandleStick (object):
 		text = 'ts={}, open={}, high={}, low={}, close={}, vol={}'
 		v = self.ts, self.open, self.high, self.low, self.close, self.volume
 		return '{' + text.format(*v) + '}'
+	def __add__ (self, other):
+		nc = CandleStick(min(self.t, other.t),
+			self.open, max(self.high, other.high),
+			min(self.low, other.low), other.close,
+			self.volume + other.volume)
+		return nc
+	def decimal (self, enable):
+		if enable:
+			self.open = decimal.Decimal(self.open)
+			self.high = decimal.Decimal(self.high)
+			self.low = decimal.Decimal(self.low)
+			self.close = decimal.Decimal(self.close)
+			self.volume = decimal.Decimal(self.volume)
+		else:
+			self.open = float(self.open)
+			self.high = float(self.high)
+			self.low = float(self.low)
+			self.close = float(self.close)
+			self.volume = float(self.volume)
+		return True
 	def record (self):
 		v = self.ts, self.open, self.high, self.low, self.close, self.volume
 		return v
@@ -260,6 +280,7 @@ class CandleDB (object):
 		self.__conn = None
 		self.__verbose = verbose
 		self.__init = init
+		self.decimal = False
 		if 'db' not in argv:
 			raise KeyError('not find db name')
 		self.__open()
@@ -414,7 +435,7 @@ class CandleDB (object):
 			record = c.fetchone()
 		if record is None:
 			return None
-		return record
+		return CandleStick(*record)
 
 	def read_last (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
@@ -425,7 +446,7 @@ class CandleDB (object):
 			record = c.fetchone()
 		if record is None:
 			return None
-		return record
+		return CandleStick(*record)
 
 	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
 		tabname = self.__get_table_name(mode)
