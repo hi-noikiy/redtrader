@@ -299,6 +299,32 @@ class CandleLite (object):
 			return False
 		return True
 
+	# write meta information
+	def meta_write (self, name, value, commit = True):
+		sql1 = 'insert or ignore into meta(name, value, ctime, mtime)'
+		sql1 += ' values(?, ?, ?, ?);'
+		sql2 = 'UPDATE meta SET value=?, mtime=? WHERE name=?;'
+		now = time.strftime('%Y-%m-%d %H:%M:%S')
+		value = json.dumps(value)
+		try:
+			self.__conn.execute(sql1, (name, value, now, now))
+			self.__conn.execute(sql2, (value, now, name))
+			if commit:
+				self.__conn.commit()
+		except sqlite3.IntegrityError:
+			return False
+		return True
+
+	# read meta infomation
+	def meta_read (self, name):
+		c = self.__conn.cursor()
+		c.execute('select value from meta where name=?;', (name,))
+		record = c.fetchone()
+		if record is None:
+			return None
+		return json.loads(record[0])
+
+
 
 #----------------------------------------------------------------------
 # CandleDB
@@ -549,11 +575,11 @@ class CandleDB (object):
 		try:
 			with self.__conn as c:
 				c.execute(sql, record)
+			if commit:
+				self.__conn.commit()
 		except MySQLdb.Error as e:
 			self.out(str(e))
 			return False
-		if commit:
-			self.__conn.commit()
 		return True
 
 	def commit (self):
@@ -585,6 +611,33 @@ class CandleDB (object):
 			self.out(str(e))
 			return False
 		return True
+
+	# write meta information
+	def meta_write (self, name, value, commit = True):
+		sql1 = 'insert ignore into meta(name, value, ctime, mtime)'
+		sql1 += ' values(%s, %s, %s, %s);'
+		sql2 = 'UPDATE meta SET value=%s, mtime=%s WHERE name=%s;'
+		now = time.strftime('%Y-%m-%d %H:%M:%S')
+		value = json.dumps(value)
+		try:
+			with self.__conn as c:
+				c.execute(sql1, (name, value, now, now))
+				c.execute(sql2, (value, now, name))
+			if commit:
+				self.__conn.commit()
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+	# read meta infomation
+	def meta_read (self, name):
+		with self.__conn as c:
+			c.execute('select value from meta where name=%s;', (name,))
+			record = c.fetchone()
+		if record is None:
+			return None
+		return json.loads(record[0])
 
 
 #----------------------------------------------------------------------
@@ -667,13 +720,14 @@ if __name__ == '__main__':
 	def test4():
 		records1 = []
 		records2 = []
-		for i in xrange(10000):
+		for i in xrange(100):
 			records1.append(CandleStick(i))
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
 		cc = CandleDB(my, init = True)
 		print(cc.uri)
 		cc.decimal = False
+		cc.verbose = True
 		print('remove')
 		cc.delete_all('ETH/USDT')
 		print('begin')
@@ -691,6 +745,11 @@ if __name__ == '__main__':
 		print()
 		for n in cc.read('ETH/USDT', 10, 20):
 			print(n)
+		cc.meta_write('name', 'skywind', False)
+		print(cc.meta_read('name'))
+		cc.meta_write('name', 'linwei', False)
+		cc.commit()
+		print(cc.meta_read('name'))
 		return 0
 
 	test4()
