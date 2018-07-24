@@ -72,7 +72,7 @@ class CandleStick (object):
 			self.low = float(self.low)
 			self.close = float(self.close)
 			self.volume = float(self.volume)
-		return True
+		return self
 	def record (self):
 		v = self.ts, self.open, self.high, self.low, self.close, self.volume
 		return v
@@ -86,7 +86,8 @@ class CandleLite (object):
 	def __init__ (self, filename, verbose = False):
 		self.__dbname = os.path.abspath(filename)
 		self.__conn = None
-		self.__verbose = verbose
+		self.verbose = verbose
+		self.decimal = True
 		self.__open()
 
 	def __open (self):
@@ -152,12 +153,9 @@ class CandleLite (object):
 		self.close()
 
 	def out (self, text):
-		if self.__verbose:
+		if self.verbose:
 			print(text)
 		return True
-
-	def verbose (self, verbose):
-		self.__verbose = verbose
 
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
@@ -172,6 +170,7 @@ class CandleLite (object):
 		c.execute(sql, (symbol, start, end))
 		for obj in c.fetchall():
 			cs = CandleStick(*obj)
+			cs.decimal(self.decimal)
 			record.append(cs)
 		c.close()
 		return record
@@ -186,7 +185,7 @@ class CandleLite (object):
 		c.close()
 		if record is None:
 			return None
-		return CandleStick(*record)
+		return CandleStick(*record).decimal(self.decimal)
 
 	def read_last (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
@@ -198,7 +197,7 @@ class CandleLite (object):
 		c.close()
 		if record is None:
 			return None
-		return CandleStick(*record)
+		return CandleStick(*record).decimal(self.decimal)
 
 	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
 		tabname = self.__get_table_name(mode)
@@ -278,9 +277,9 @@ class CandleDB (object):
 				self.__uri[k] = v
 		self.__uri['connect_timeout'] = timeout
 		self.__conn = None
-		self.__verbose = verbose
+		self.verbose = verbose
 		self.__init = init
-		self.decimal = False
+		self.decimal = True
 		if 'db' not in argv:
 			raise KeyError('not find db name')
 		self.__open()
@@ -324,7 +323,7 @@ class CandleDB (object):
 
 	# 输出日志
 	def out (self, text):
-		if self.__verbose:
+		if self.verbose:
 			print(text)
 		return True
 
@@ -407,9 +406,6 @@ class CandleDB (object):
 	def __del__ (self):
 		self.close()
 
-	def verbose (self, verbose):
-		self.__verbose = verbose
-
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
@@ -423,8 +419,7 @@ class CandleDB (object):
 			c.execute(sql, (symbol, start, end))
 			for obj in c.fetchall():
 				cs = CandleStick(*obj)
-				if not self.decimal:
-					cs.decimal(False)
+				cs.decimal(self.decimal)
 				record.append(cs)
 		return record
 
@@ -437,10 +432,7 @@ class CandleDB (object):
 			record = c.fetchone()
 		if record is None:
 			return None
-		cs = CandleStick(*record)
-		if not self.decimal:
-			cs.decimal(False)
-		return cs
+		return CandleStick(*record).decimal(self.decimal)
 
 	def read_last (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
@@ -451,10 +443,7 @@ class CandleDB (object):
 			record = c.fetchone()
 		if record is None:
 			return None
-		cs = CandleStick(*record)
-		if not self.decimal:
-			cs.decimal(False)
-		return cs
+		return CandleStick(*record).decimal(self.decimal)
 
 	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
 		tabname = self.__get_table_name(mode)
@@ -517,7 +506,7 @@ if __name__ == '__main__':
 	my = {'host':'127.0.0.1', 'user':'skywind', 'passwd':'000000', 'db':'skywind_t2'}
 	def test1():
 		cc = CandleLite('candrec.db')
-		cc.verbose(True)
+		cc.verbose = True
 		cc.delete_all('ETH/USDT')
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
@@ -557,7 +546,8 @@ if __name__ == '__main__':
 		return 0
 	def test3():
 		cc = CandleDB(my, init = True)
-		cc.verbose(True)
+		cc.verbose = True
+		cc.decimal = False
 		cc.delete_all('ETH/USDT')
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
@@ -578,6 +568,7 @@ if __name__ == '__main__':
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
 		cc = CandleDB(my, init = True)
+		cc.decimal = False
 		print('remove')
 		cc.delete_all('ETH/USDT')
 		print('begin')
@@ -597,7 +588,7 @@ if __name__ == '__main__':
 			print(n)
 		return 0
 
-	test3()
+	test4()
 
 
 
