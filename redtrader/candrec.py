@@ -157,7 +157,7 @@ class CandleLite (object):
 
 		sql = '''
 		CREATE TABLE IF NOT EXISTS "meta" (
-			"name" VARCHAR(16) PRIMARY KEY NOT NULL UNIQUE,
+			"name" VARCHAR(16) PRIMARY KEY COLLATE NOCASE NOT NULL UNIQUE,
 			"value" TEXT,
 			"ctime" DATETIME NOT NULL DEFAULT (datetime('now', 'localtime')),
 			"mtime" DATETIME NOT NULL DEFAULT (datetime('now', 'localtime'))
@@ -703,9 +703,9 @@ if __name__ == '__main__':
 		print()
 		cc.meta_write('name', 'skywind', False)
 		print(cc.meta_read('name'))
-		cc.meta_write('name', 'linwei', False)
+		cc.meta_write('nAme', 'linwei', False)
 		cc.commit()
-		print(cc.meta_read('name'))
+		print(cc.meta_read('Name'))
 		return 0
 	def test3():
 		cc = CandleDB(my, init = True)
@@ -754,12 +754,12 @@ if __name__ == '__main__':
 		print()
 		cc.meta_write('name', 'skywind', False)
 		print(cc.meta_read('name'))
-		cc.meta_write('name', 'linwei', False)
+		cc.meta_write('nAme', 'linwei', False)
 		cc.commit()
-		print(cc.meta_read('name'))
+		print(cc.meta_read('Name'))
 		return 0
 
-	test2()
+	test4()
 
 
 
