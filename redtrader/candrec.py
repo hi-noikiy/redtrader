@@ -53,6 +53,9 @@ class CandleStick (object):
 		text = 'ts={}, open={}, high={}, low={}, close={}, vol={}'
 		v = self.ts, self.open, self.high, self.low, self.close, self.volume
 		return '{' + text.format(*v) + '}'
+	def record (self):
+		v = self.ts, self.open, self.high, self.low, self.close, self.volume
+		return v
 
 
 
@@ -146,7 +149,7 @@ class CandleLite (object):
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
-	def query (self, symbol, start, end, mode = 'd'):
+	def read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
 		sql += ' from %s where symbol = ? '%tabname
@@ -157,30 +160,96 @@ class CandleLite (object):
 		for obj in c.fetchall():
 			cs = CandleStick(*obj)
 			record.append(cs)
+		c.close()
 		return record
 
-	def first_candle (self, symbol, mode = 'd'):
+	def read_first (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
 		sql += ' from %s where symbol = ? order by ts limit 1;'%tabname
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, ))
 		record = c.fetchone()
+		c.close()
 		if record is None:
 			return None
-		return CandleStick(*obj)
+		return CandleStick(*record)
 
-	def last_candle (self, symbol, mode = 'd'):
+	def read_last (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
 		sql += ' from %s where symbol = ? order by ts desc limit 1;'%tabname
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, ))
 		record = c.fetchone()
+		c.close()
 		if record is None:
 			return None
-		return CandleStick(*obj)
+		return CandleStick(*record)
 
+	def write (self, symbol, candles, mode = 'd', rep = False, commit = True):
+		tabname = self.__get_table_name(mode)
+		records = []
+		if isinstance(candles, CandleStick):
+			records.append(candles.record())
+		else:
+			for candle in candles:
+				if isinstance(candle, CandleStick):
+					records.append(candle.record())
+				elif isinstance(candle, list):
+					records.append(tuple(candle))
+				elif isinstance(candle, tuple):
+					records.append(candle)
+
+		symbol = symbol.replace('\'', '').replace('"', '')
+		sql = '%s INTO %s (symbol, ts, open, high, low, close, volume)'
+		sql = sql%(rep and 'REPLACE' or 'INSERT', tabname)
+		sql += " values('%s', ?, ?, ?, ?, ?, ?);"%symbol
+
+		try:
+			self.__conn.executemany(sql, records)
+		except sqlite3.InternalError as e:
+			self.out(str(e))
+			return False
+		except sqlite3.Error as e:
+			self.out(str(e))
+			return False
+
+		if self.commit:
+			self.__conn.commit()
+
+		return True
+
+	def delete (self, symbol, start, end, mode = 'd', commit = True):
+		tabname = self.__get_table_name(mode)
+		sql = 'DELETE FROM %s WHERE symbol = ? and ts >= ? and ts < ?;'
+		try:
+			self.__conn.execute(sql%tabname, (symbol, start, end))
+			if commit:
+				self.__conn.commit()
+		except sqlite3.InternalError as e:
+			self.out(str(e))
+			return False
+		except sqlite3.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+	def delete_all (self, symbol, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'DELETE FROM %s WHERE symbol = ?;'%tabname
+		try:
+			self.__conn.execute(sql, (symbol, ))
+			self.__conn.commit()
+		except sqlite3.InternalError as e:
+			self.out(str(e))
+			return False
+		except sqlite3.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+			
 
 #----------------------------------------------------------------------
 # testing case
@@ -190,9 +259,13 @@ if __name__ == '__main__':
 		c = CandleStick(1, 2, 3, 4, 5, 100)
 		print(c)
 		cl = CandleLite('test.db')
-		print(cl.query('ETH/USDT', 0, 0xffffffff))
+		print(cl.read('ETH/USDT', 0, 0xffffffff))
 		return 0
-	test1()
+	def test2():
+		cc = CandleLite('test.db')
+		cc.delete_all('ETH/USDT')
+		return 0
+	test2()
 
 
 
