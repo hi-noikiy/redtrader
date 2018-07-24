@@ -375,8 +375,8 @@ class CandleDB (object):
 		self.__conn.query('USE %s;'%database)
 		sql = '''
 			CREATE TABLE IF NOT EXISTS `%s`.`{name}` (
-			`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT,
-			`ts` BIGINT UNSIGNED DEFAULT 0,
+			`id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+			`ts` INT UNSIGNED DEFAULT 0,
 			`symbol` VARCHAR(16) NOT NULL,
 			`open` DECIMAL(32, 16) DEFAULT 0,
 			`high` DECIMAL(32, 16) DEFAULT 0,
@@ -405,8 +405,8 @@ class CandleDB (object):
 
 		sql = '''
 			CREATE TABLE IF NOT EXISTS `%s`.`{name}` (
-			`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT,
-			`ts` BIGINT UNSIGNED DEFAULT 0,
+			`id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+			`ts` INT UNSIGNED DEFAULT 0,
 			`symbol` VARCHAR(16) NOT NULL,
 			`data` TEXT,
 			UNIQUE KEY `tssym` (`ts`, `symbol`),
