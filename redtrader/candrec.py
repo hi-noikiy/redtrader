@@ -88,6 +88,10 @@ class CandleLite (object):
 		self.__conn = None
 		self.verbose = verbose
 		self.decimal = True
+		if sys.platform[:3] != 'win':
+			self.uri = 'sqlite://' + self.__dbname
+		else:
+			self.uri = 'sqlite://' + self.__dbname.replace('\\', '/')
 		self.__open()
 
 	def __open (self):
@@ -282,6 +286,16 @@ class CandleDB (object):
 		self.decimal = True
 		if 'db' not in argv:
 			raise KeyError('not find db name')
+		self.uri = 'mysql://'
+		if 'user' in argv:
+			self.uri += argv['user']
+			if 'passwd' in argv:
+				self.uri += ':' + argv['passwd']
+			self.uri += '@'
+		self.uri += argv['host']
+		if 'port' in argv:
+			self.uri += ':' + str(argv['port'])
+		self.uri += '/' + argv['db']
 		self.__open()
 
 	def __mysql_startup (self):
@@ -526,6 +540,7 @@ if __name__ == '__main__':
 			records1.append(CandleStick(i))
 			records2.append(CandleStick(1000000 + i))
 		cc = CandleLite('candrec.db')
+		print(cc.uri)
 		print('remove')
 		cc.delete_all('ETH/USDT')
 		print('begin')
@@ -568,6 +583,7 @@ if __name__ == '__main__':
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
 		cc = CandleDB(my, init = True)
+		print(cc.uri)
 		cc.decimal = False
 		print('remove')
 		cc.delete_all('ETH/USDT')
@@ -588,7 +604,7 @@ if __name__ == '__main__':
 			print(n)
 		return 0
 
-	test4()
+	test2()
 
 
 
