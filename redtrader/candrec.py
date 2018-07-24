@@ -405,6 +405,80 @@ class CandleDB (object):
 				record.append(cs)
 		return record
 
+	def read_first (self, symbol, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume '
+		sql += ' from {} where symbol = %s order by ts limit 1;'
+		with self.__conn as c:
+			c.execute(sql.format(tabname), (symbol, ))
+			record = c.fetchone()
+		if record is None:
+			return None
+		return record
+
+	def read_last (self, symbol, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume '
+		sql += ' from {} where symbol = %s order by ts desc limit 1;'
+		with self.__conn as c:
+			c.execute(sql.format(tabname), (symbol, ))
+			record = c.fetchone()
+		if record is None:
+			return None
+		return record
+
+	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
+		tabname = self.__get_table_name(mode)
+		record = None
+		if isinstance(candle, CandleStick):
+			record = candle.record()
+		elif isinstance(candle, tuple):
+			record = candle
+		else:
+			record = tuple(candle)
+		symbol = symbol.replace('\'', '').replace('"', '')
+		sql = '%s INTO %s (symbol, ts, open, high, low, close, volume)'
+		sql = sql%(rep and 'REPLACE' or 'INSERT', tabname)
+		sql += " values('{}', %s, %s, %s, %s, %s, %s);".format(symbol)
+		try:
+			with self.__conn as c:
+				c.execute(sql, record)
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		if commit:
+			self.__conn.commit()
+		return True
+
+	def commit (self):
+		if self.__conn:
+			self.__conn.commit()
+		return True
+
+	def delete (self, symbol, start, end, mode = 'd', commit = True):
+		tabname = self.__get_table_name(mode)
+		sql = 'DELETE FROM {} WHERE symbol = %s and ts >= %s and ts < %s;'
+		try:
+			with self.__conn as c:
+				c.execute(sql.format(tabname), (symbol, start, end))
+			if commit:
+				self.__conn.commit()
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+	def delete_all (self, symbol, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'DELETE FROM %s WHERE symbol = ?;'%tabname
+		try:
+			with self.__conn as c:
+				c.execute(sql, (symbol, ))
+				c.commit()
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		return True
 
 
 #----------------------------------------------------------------------
