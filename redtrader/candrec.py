@@ -700,6 +700,12 @@ if __name__ == '__main__':
 		print()
 		for n in cc.read('ETH/USDT', 10, 20):
 			print(n)
+		print()
+		cc.meta_write('name', 'skywind', False)
+		print(cc.meta_read('name'))
+		cc.meta_write('name', 'linwei', False)
+		cc.commit()
+		print(cc.meta_read('name'))
 		return 0
 	def test3():
 		cc = CandleDB(my, init = True)
@@ -720,7 +726,7 @@ if __name__ == '__main__':
 	def test4():
 		records1 = []
 		records2 = []
-		for i in xrange(100):
+		for i in xrange(1000):
 			records1.append(CandleStick(i))
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
@@ -745,6 +751,7 @@ if __name__ == '__main__':
 		print()
 		for n in cc.read('ETH/USDT', 10, 20):
 			print(n)
+		print()
 		cc.meta_write('name', 'skywind', False)
 		print(cc.meta_read('name'))
 		cc.meta_write('name', 'linwei', False)
@@ -752,7 +759,7 @@ if __name__ == '__main__':
 		print(cc.meta_read('name'))
 		return 0
 
-	test4()
+	test2()
 
 
 
