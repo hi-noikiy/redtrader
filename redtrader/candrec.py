@@ -252,22 +252,17 @@ class CandleLite (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def write (self, symbol, candle, mode = 'd', commit = True):
+	def write (self, symbol, candles, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
-		record = None
-		if isinstance(candle, CandleStick):
-			record = candle.record()
-		elif isinstance(candle, tuple):
-			record = candle
+		if isinstance(candles, CandleStick):
+			records = [ candles.record() ]
 		else:
-			record = tuple(candle)
-		symbol = symbol.replace('\'', '').replace('"', '')
-		sql1 = 'INSERT OR IGNORE INTO %s (symbol, ts) VALUES(?, ?)'%tabname
-		sql2 = 'UPDATE %s SET open=?, high=?, low=?, close=?, volume=?'%tabname
-		sql2 += ' WHERE ts=? and symbol=?'
+			records = [ candle.record() for candle in candles ]
+		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
+		sql = 'REPLACE INTO %s (symbol, ts, open, high, low, close, volume)'%tabname
+		sql += ' VALUES(\'{}\', ?, ?, ?, ?, ?, ?);'.format(symbol)
 		try:
-			self.__conn.execute(sql1, (symbol, record[0]))
-			self.__conn.execute(sql2, list(record[1:]) + [record[0], symbol])
+			self.__conn.executemany(sql, records)
 		except sqlite3.InternalError as e:
 			self.out(str(e))
 			return False
@@ -326,7 +321,7 @@ class CandleLite (object):
 		return record
 
 	# pos: head(-2), tail(-1)	
-	def tick_pick (self, symbol, pos, mode = 'd'):
+	def tick_pick (self, symbol, pos, mode = 1):
 		tabname = self.__get_tick_table(mode)
 		c = self.__conn.cursor()
 		sql = 'select ts, data from %s'%tabname
@@ -344,6 +339,27 @@ class CandleLite (object):
 		if record is None:
 			return None
 		return TickData(record[0], json.loads(record[1]))
+
+	def tick_write (self, symbol, ticks, mode = 1, commit = True):
+		tabname = self.__get_tick_table(mode)
+		if isinstance(ticks, TickData):
+			records = [ ticks.record() ]
+		else:
+			records = [ tick.record() for tick in ticks ]
+		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
+		sql = 'REPLACE INTO %s (symbol, ts, data) '%tabname
+		sql += ' VALUES (\'{}\', ?, ?);'.format(symbol)
+		try:
+			self.__conn.executemany(sql, records)
+		except sqlite3.InternalError as e:
+			self.out(str(e))
+			return False
+		except sqlite3.Error as e:
+			self.out(str(e))
+			return False
+		if commit:
+			self.__conn.commit()
+		return True
 
 	# write meta information
 	def meta_write (self, name, value, commit = True):
@@ -610,21 +626,18 @@ class CandleDB (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def write (self, symbol, candle, mode = 'd', commit = True):
+	def write (self, symbol, candles, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
-		record = None
-		if isinstance(candle, CandleStick):
-			record = candle.record()
-		elif isinstance(candle, tuple):
-			record = candle
+		if isinstance(candles, CandleStick):
+			records = [candles.record()]
 		else:
-			record = tuple(candle)
-		symbol = symbol.replace('\'', '').replace('"', '')
+			records = [ candle.record() for candle in candles ]
+		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s (symbol, ts, open, high, low, close, volume)'%tabname
-		sql += " values(%s, %s, %s, %s, %s, %s, %s);"
+		sql += " values(\'{}\', %s, %s, %s, %s, %s, %s);".format(symbol)
 		try:
 			with self.__conn as c:
-				c.execute(sql, [symbol] + list(record))
+				c.executemany(sql, records)
 			if commit:
 				self.__conn.commit()
 		except MySQLdb.Error as e:
@@ -662,7 +675,7 @@ class CandleDB (object):
 			return False
 		return True
 
-	def tick_read (self, symbol, start, end, mode = 'd'):
+	def tick_read (self, symbol, start, end, mode = 1):
 		tabname = self.__get_tick_table(mode)
 		sql = 'select ts, data from {} where symbol = %s'.format(tabname)
 		sql += ' and ts >= %s and ts < %s order by ts;'
@@ -675,7 +688,7 @@ class CandleDB (object):
 		return record
 
 	# pos: head(-2), tail(-1)
-	def tick_pick (self, symbol, pos, mode = 'd'):
+	def tick_pick (self, symbol, pos, mode = 1):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume from %s'%tabname
 		with self.__conn as c:
@@ -693,6 +706,25 @@ class CandleDB (object):
 		if record is None:
 			return None
 		return CandleStick(*record).decimal(self.decimal)
+
+	def tick_write (self, symbol, ticks, mode = 'd', commit = True):
+		tabname = self.__get_tick_table(mode)
+		if isinstance(ticks, TickData):
+			records = [ ticks.record() ]
+		else:
+			records = [ tick.record() for tick in ticks ]
+		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
+		sql = 'REPLACE INTO %s (symbol, ts, data)'%tabname
+		sql += " values(\'{}\', %s, %s);".format(symbol)
+		try:
+			with self.__conn as c:
+				c.executemany(sql, records)
+			if commit:
+				self.__conn.commit()
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		return True
 
 	# write meta information
 	def meta_write (self, name, value, commit = True):
@@ -776,8 +808,9 @@ if __name__ == '__main__':
 			cc.write('ETH/USDT', rec, commit = False)
 		print('time', time.time() - t1)
 		t1 = time.time()
-		for rec in records2:
-			cc.write('ETH/USDT', rec, commit = False)
+		# for rec in records2:
+		# 	cc.write('ETH/USDT', rec, commit = False)
+		cc.write('ETH/USDT', records2, commit = False)
 		cc.commit()
 		print('time', time.time() - t1)
 		print(cc.pick('ETH/USDT', -2))
@@ -830,8 +863,9 @@ if __name__ == '__main__':
 			cc.write('ETH/USDT', rec, commit = True)
 		print('time', time.time() - t1)
 		t1 = time.time()
-		for rec in records2:
-			cc.write('ETH/USDT', rec, commit = False)
+		# for rec in records2:
+		# 	cc.write('ETH/USDT', rec, commit = False)
+		cc.write('ETH/USDT', records2)
 		cc.commit()
 		print('time', time.time() - t1)
 		print(cc.pick('ETH/USDT', -2))
@@ -850,7 +884,7 @@ if __name__ == '__main__':
 		print(cc.mtime, cc.ctime)
 		return 0
 
-	test2()
+	test4()
 
 
 
