@@ -323,6 +323,26 @@ class CandleLite (object):
 		c.close()
 		return record
 
+	# pos: head(-2), tail(-1)	
+	def tick_pick (self, symbol, pos, mode = 'd'):
+		tabname = self.__get_tick_table(mode)
+		c = self.__conn.cursor()
+		sql = 'select ts, data from %s'%tabname
+		if pos < 0:
+			if pos == -1:
+				sql += ' where symbol = ? order by ts desc limit 1;'
+			else:
+				sql += ' where symbol = ? order by ts limit 1;'
+			c.execute(sql, (symbol, ))
+		else:
+			sql += ' where symbol = ? and ts <= ? order by ts desc limit 1;'
+			c.execute(sql, (symbol, pos))
+		record = c.fetchone()
+		c.close()
+		if record is None:
+			return None
+		return TickData(record[0], json.loads(record[1]))
+
 	# write meta information
 	def meta_write (self, name, value, commit = True):
 		sql1 = 'insert or ignore into meta(name, value, ctime, mtime)'
@@ -551,6 +571,9 @@ class CandleDB (object):
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
+	def __get_tick_table (self, mode):
+		return 'tick_{}'.format(str(mode))
+
 	def read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
@@ -637,6 +660,38 @@ class CandleDB (object):
 			self.out(str(e))
 			return False
 		return True
+
+	def tick_read (self, symbol, start, end, mode = 'd'):
+		tabname = self.__get_tick_table(mode)
+		sql = 'select ts, data from {} where symbol = %s'.format(tabname)
+		sql += ' and ts >= %s and ts < %s order by ts;'
+		record = []
+		with self.__conn as c:
+			c.execute(sql, (symbol, start, end))
+			for obj in c.fetchall():
+				td = TickData(obj[0], json.loads(obj[1]))
+				record.append(td)
+		return record
+
+	# pos: head(-2), tail(-1)
+	def tick_pick (self, symbol, pos, mode = 'd'):
+		tabname = self.__get_table_name(mode)
+		sql = 'select ts, open, high, low, close, volume from %s'%tabname
+		with self.__conn as c:
+			if pos < 0:
+				if pos == -1:
+					sql += ' where symbol = %s order by ts desc limit 1;'
+					c.execute(sql, (symbol, ))
+				else:
+					sql += ' where symbol = %s order by ts limit 1;'
+					c.execute(sql, (symbol, ))
+			else:
+				sql += ' where symbol = %s and ts <= %s order by ts desc limit 1;'
+				c.execute(sql, (symbol, pos))
+			record = c.fetchone()
+		if record is None:
+			return None
+		return CandleStick(*record).decimal(self.decimal)
 
 	# write meta information
 	def meta_write (self, name, value, commit = True):
