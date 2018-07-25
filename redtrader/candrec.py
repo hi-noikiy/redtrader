@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/07/23 00:50:42
+# Last Modified: 2018/07/26 00:30
 #
 #======================================================================
 from __future__ import print_function
@@ -965,7 +965,7 @@ if __name__ == '__main__':
 			print(tick)
 		return 0
 
-	test4()
+	test5()
 
 
 
