@@ -8,6 +8,7 @@
 # Last Modified: 2018/07/23 00:50:42
 #
 #======================================================================
+#  vim: set ts=4 sw=4 tw=0 noet :
 from __future__ import print_function
 import sys
 import time
@@ -22,8 +23,7 @@ try:
 except:
 	import simplejson as json
 
-# MySQLdb = None
-import MySQLdb
+MySQLdb = None
 
 
 #----------------------------------------------------------------------
