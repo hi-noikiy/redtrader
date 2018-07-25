@@ -211,13 +211,18 @@ class CandleLite (object):
 			print(text)
 		return True
 
+	def commit (self):
+		if self.__conn:
+			self.__conn.commit()
+		return True
+
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
 	def __get_tick_table (self, mode):
 		return 'tick_{}'.format(str(mode))
 
-	def read (self, symbol, start, end, mode = 'd'):
+	def candle_read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
 		sql += ' from %s where symbol = ? '%tabname
@@ -233,7 +238,7 @@ class CandleLite (object):
 		return record
 
 	# pos: head(-2), tail(-1)	
-	def pick (self, symbol, pos, mode = 'd'):
+	def candle_pick (self, symbol, pos, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		c = self.__conn.cursor()
 		sql = 'select ts, open, high, low, close, volume from %s'%tabname
@@ -252,7 +257,7 @@ class CandleLite (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def write (self, symbol, candles, mode = 'd', commit = True):
+	def candle_write (self, symbol, candles, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
 		if isinstance(candles, CandleStick):
 			records = [ candles.record() ]
@@ -273,12 +278,7 @@ class CandleLite (object):
 			self.__conn.commit()
 		return True
 
-	def commit (self):
-		if self.__conn:
-			self.__conn.commit()
-		return True
-
-	def delete (self, symbol, start, end, mode = 'd', commit = True):
+	def candle_erase (self, symbol, start, end, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
 		sql = 'DELETE FROM %s WHERE symbol = ? and ts >= ? and ts < ?;'
 		try:
@@ -293,7 +293,7 @@ class CandleLite (object):
 			return False
 		return True
 
-	def delete_all (self, symbol, mode = 'd'):
+	def candle_empty (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'DELETE FROM %s WHERE symbol = ?;'%tabname
 		try:
@@ -359,6 +359,35 @@ class CandleLite (object):
 			return False
 		if commit:
 			self.__conn.commit()
+		return True
+
+	def tick_erase (self, symbol, start, end, mode = 1, commit = True):
+		tabname = self.__get_tick_table(mode)
+		sql = 'DELETE FROM %s WHERE symbol = ? and ts >= ? and ts < ?;'
+		try:
+			self.__conn.execute(sql%tabname, (symbol, start, end))
+			if commit:
+				self.__conn.commit()
+		except sqlite3.InternalError as e:
+			self.out(str(e))
+			return False
+		except sqlite3.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+	def tick_empty (self, symbol, mode = 1):
+		tabname = self.__get_tick_table(mode)
+		sql = 'DELETE FROM %s WHERE symbol = ?;'%tabname
+		try:
+			self.__conn.execute(sql, (symbol, ))
+			self.__conn.commit()
+		except sqlite3.InternalError as e:
+			self.out(str(e))
+			return False
+		except sqlite3.Error as e:
+			self.out(str(e))
+			return False
 		return True
 
 	# write meta information
@@ -586,13 +615,18 @@ class CandleDB (object):
 	def __del__ (self):
 		self.close()
 
+	def commit (self):
+		if self.__conn:
+			self.__conn.commit()
+		return True
+
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
 	def __get_tick_table (self, mode):
 		return 'tick_{}'.format(str(mode))
 
-	def read (self, symbol, start, end, mode = 'd'):
+	def candle_read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
 		sql += ' from {} where symbol = %s '.format(tabname)
@@ -607,7 +641,7 @@ class CandleDB (object):
 		return record
 
 	# pos: head(-2), tail(-1)
-	def pick (self, symbol, pos, mode = 'd'):
+	def candle_pick (self, symbol, pos, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume from %s'%tabname
 		with self.__conn as c:
@@ -626,7 +660,7 @@ class CandleDB (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def write (self, symbol, candles, mode = 'd', commit = True):
+	def candle_write (self, symbol, candles, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
 		if isinstance(candles, CandleStick):
 			records = [candles.record()]
@@ -645,12 +679,7 @@ class CandleDB (object):
 			return False
 		return True
 
-	def commit (self):
-		if self.__conn:
-			self.__conn.commit()
-		return True
-
-	def delete (self, symbol, start, end, mode = 'd', commit = True):
+	def candle_erase (self, symbol, start, end, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
 		sql = 'DELETE FROM {} WHERE symbol = %s and ts >= %s and ts < %s;'
 		try:
@@ -663,7 +692,7 @@ class CandleDB (object):
 			return False
 		return True
 
-	def delete_all (self, symbol, mode = 'd'):
+	def candle_empty (self, symbol, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'DELETE FROM {} WHERE symbol = %s;'.format(tabname)
 		try:
@@ -707,7 +736,7 @@ class CandleDB (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def tick_write (self, symbol, ticks, mode = 'd', commit = True):
+	def tick_write (self, symbol, ticks, mode = 1, commit = True):
 		tabname = self.__get_tick_table(mode)
 		if isinstance(ticks, TickData):
 			records = [ ticks.record() ]
@@ -720,6 +749,31 @@ class CandleDB (object):
 			with self.__conn as c:
 				c.executemany(sql, records)
 			if commit:
+				self.__conn.commit()
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+	def tick_erase (self, symbol, start, end, mode = 1, commit = True):
+		tabname = self.__get_tick_table(mode)
+		sql = 'DELETE FROM {} WHERE symbol = %s and ts >= %s and ts < %s;'
+		try:
+			with self.__conn as c:
+				c.execute(sql.format(tabname), (symbol, start, end))
+			if commit:
+				self.__conn.commit()
+		except MySQLdb.Error as e:
+			self.out(str(e))
+			return False
+		return True
+
+	def tick_empty (self, symbol, mode = 1):
+		tabname = self.__get_tick_table(mode)
+		sql = 'DELETE FROM {} WHERE symbol = %s;'.format(tabname)
+		try:
+			with self.__conn as c:
+				c.execute(sql, (symbol, ))
 				self.__conn.commit()
 		except MySQLdb.Error as e:
 			self.out(str(e))
@@ -778,16 +832,16 @@ if __name__ == '__main__':
 	def test1():
 		cc = CandleLite('candrec.db')
 		cc.verbose = True
-		cc.delete_all('ETH/USDT')
+		cc.candle_empty('ETH/USDT')
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
-		hr = cc.write('ETH/USDT', c1)
-		hr = cc.write('ETH/USDT', c2)
-		hr = cc.write('ETH/USDT', c2)
-		hr = cc.write('ETH/USDT', c3)
+		hr = cc.candle_write('ETH/USDT', c1)
+		hr = cc.candle_write('ETH/USDT', c2)
+		hr = cc.candle_write('ETH/USDT', c2)
+		hr = cc.candle_write('ETH/USDT', c3)
 		print(hr)
-		for n in cc.read('ETH/USDT', 0, 0xffffffff):
+		for n in cc.candle_read('ETH/USDT', 0, 0xffffffff):
 			print(n)
 		return 0
 	def test2():
@@ -801,23 +855,23 @@ if __name__ == '__main__':
 		cc.decimal = False
 		print(cc.uri)
 		print('remove')
-		cc.delete_all('ETH/USDT')
+		cc.candle_empty('ETH/USDT')
 		print('begin')
 		t1 = time.time()
 		for rec in records1:
-			cc.write('ETH/USDT', rec, commit = False)
+			cc.candle_write('ETH/USDT', rec, commit = False)
 		print('time', time.time() - t1)
 		t1 = time.time()
 		# for rec in records2:
-		# 	cc.write('ETH/USDT', rec, commit = False)
-		cc.write('ETH/USDT', records2, commit = False)
+		# 	cc.candle_write('ETH/USDT', rec, commit = False)
+		cc.candle_write('ETH/USDT', records2, commit = False)
 		cc.commit()
 		print('time', time.time() - t1)
-		print(cc.pick('ETH/USDT', -2))
-		print(cc.pick('ETH/USDT', -1))
-		print(cc.pick('ETH/USDT', 50))
+		print(cc.candle_pick('ETH/USDT', -2))
+		print(cc.candle_pick('ETH/USDT', -1))
+		print(cc.candle_pick('ETH/USDT', 50))
 		print()
-		for n in cc.read('ETH/USDT', 10, 20):
+		for n in cc.candle_read('ETH/USDT', 10, 20):
 			print(n)
 		print()
 		cc.meta_write('name', 'skywind')
@@ -832,16 +886,16 @@ if __name__ == '__main__':
 		cc = CandleDB(my, init = True)
 		cc.verbose = True
 		cc.decimal = False
-		cc.delete_all('ETH/USDT')
+		cc.candle_empty('ETH/USDT')
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
-		hr = cc.write('ETH/USDT', c1)
-		hr = cc.write('ETH/USDT', c2)
-		hr = cc.write('ETH/USDT', c2)
-		hr = cc.write('ETH/USDT', c3)
+		hr = cc.candle_write('ETH/USDT', c1)
+		hr = cc.candle_write('ETH/USDT', c2)
+		hr = cc.candle_write('ETH/USDT', c2)
+		hr = cc.candle_write('ETH/USDT', c3)
 		print(hr)
-		for n in cc.read('ETH/USDT', 0, 0xffffffff):
+		for n in cc.candle_read('ETH/USDT', 0, 0xffffffff):
 			print(n)
 		return 0
 	def test4():
@@ -856,23 +910,23 @@ if __name__ == '__main__':
 		cc.decimal = False
 		cc.verbose = True
 		print('remove')
-		cc.delete_all('ETH/USDT')
+		cc.candle_empty('ETH/USDT')
 		print('begin')
 		t1 = time.time()
 		for rec in records1:
-			cc.write('ETH/USDT', rec, commit = True)
+			cc.candle_write('ETH/USDT', rec, commit = True)
 		print('time', time.time() - t1)
 		t1 = time.time()
 		# for rec in records2:
-		# 	cc.write('ETH/USDT', rec, commit = False)
-		cc.write('ETH/USDT', records2)
+		# 	cc.candle_write('ETH/USDT', rec, commit = False)
+		cc.candle_write('ETH/USDT', records2)
 		cc.commit()
 		print('time', time.time() - t1)
-		print(cc.pick('ETH/USDT', -2))
-		print(cc.pick('ETH/USDT', -1))
-		print(cc.pick('ETH/USDT', 50))
+		print(cc.candle_pick('ETH/USDT', -2))
+		print(cc.candle_pick('ETH/USDT', -1))
+		print(cc.candle_pick('ETH/USDT', 50))
 		print()
-		for n in cc.read('ETH/USDT', 10, 20):
+		for n in cc.candle_read('ETH/USDT', 10, 20):
 			print(n)
 		print()
 		cc.meta_write('name', 'skywind')
@@ -883,8 +937,28 @@ if __name__ == '__main__':
 		print(cc.meta_read('Name'))
 		print(cc.mtime, cc.ctime)
 		return 0
+	def test5():
+		uri = 'mysql://skywind:000000@127.0.0.1/skywind_t2'
+		uri = 'sqlite://candrec.db'
+		cc = connect(uri)
+		cc.verbose = True
+		symbol = 'ETH/USDT'
+		cc.tick_empty(symbol)
+		print(cc.tick_read(symbol, 0, 0xffff))
+		cc.tick_write(symbol, TickData(10, 'hello'))
+		cc.tick_write(symbol, TickData(20, 'fuck'))
+		cc.tick_write(symbol, TickData(20, 'suck'))
+		cc.tick_write(symbol, TickData(30, 'you'))
+		cc.tick_write(symbol, TickData(35, 'foo'))
+		print(cc.tick_pick(symbol, -2))
+		print(cc.tick_pick(symbol, -1))
+		print(cc.tick_pick(symbol, 20))
+		print()
+		for tick in cc.tick_read(symbol, 0, 0xffffffff):
+			print(tick)
+		return 0
 
-	test4()
+	test5()
 
 
 
