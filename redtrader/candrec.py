@@ -39,16 +39,18 @@ if sys.version_info[0] >= 3:
 # CandleStick
 #----------------------------------------------------------------------
 class CandleStick (object):
-	def __init__ (self, t = 0, o = 0.0, hi = 0.0, lo = 0.0, c = 0.0, v = 0):
+	def __init__ (self, t = 0, o = 0, H = 0, L = 0, c = 0, v = 0, e = None):
 		self.ts = t
 		self.open = o
-		self.high = hi
-		self.low = lo
+		self.high = H
+		self.low = L
 		self.close = c
 		self.volume = v
+		self.extra = e
 	def __repr__ (self):
-		text = 'CandleStick({}, {}, {}, {}, {}, {})'
-		v = self.ts, self.open, self.high, self.low, self.close, self.volume
+		text = 'CandleStick({}, {}, {}, {}, {}, {}, {})'
+		v = (self.ts, self.open, self.high, self.low, 
+				self.close, self.volume, repr(self.extra))
 		return text.format(*v)
 	def __add__ (self, other):
 		nc = CandleStick(min(self.t, other.t),
@@ -71,7 +73,8 @@ class CandleStick (object):
 			self.volume = float(self.volume)
 		return self
 	def record (self):
-		v = self.ts, self.open, self.high, self.low, self.close, self.volume
+		v = (self.ts, self.open, self.high, self.low, 
+				self.close, self.volume, self.extra)
 		return v
 
 
@@ -120,6 +123,7 @@ class CandleLite (object):
 			"low" DECIMAL(32, 16) DEFAULT(0),
 			"close" DECIMAL(32, 16) DEFAULT(0),
 			"volume" DECIMAL(32, 16) DEFAULT(0),
+			"extra" TEXT,
 			CONSTRAINT 'tssym' UNIQUE (ts, symbol)
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS "{name}_1" ON {name} (ts, symbol);
@@ -224,7 +228,7 @@ class CandleLite (object):
 
 	def candle_read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume '
+		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from %s where symbol = ? '%tabname
 		sql += ' and ts >= ? and ts < ? order by ts;'
 		record = []
@@ -241,7 +245,7 @@ class CandleLite (object):
 	def candle_pick (self, symbol, pos, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		c = self.__conn.cursor()
-		sql = 'select ts, open, high, low, close, volume from %s'%tabname
+		sql = 'select ts, open, high, low, close, volume, extra from %s'%tabname
 		if pos < 0:
 			if pos == -1:
 				sql += ' where symbol = ? order by ts desc limit 1;'
@@ -264,8 +268,9 @@ class CandleLite (object):
 		else:
 			records = [ candle.record() for candle in candles ]
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
-		sql = 'REPLACE INTO %s (symbol, ts, open, high, low, close, volume)'%tabname
-		sql += ' VALUES(\'{}\', ?, ?, ?, ?, ?, ?);'.format(symbol)
+		sql = 'REPLACE INTO %s '%tabname
+		sql += '(symbol, ts, open, high, low, close, volume, extra)'
+		sql += ' VALUES(\'{}\', ?, ?, ?, ?, ?, ?, ?);'.format(symbol)
 		try:
 			self.__conn.executemany(sql, records)
 		except sqlite3.InternalError as e:
@@ -516,6 +521,7 @@ class CandleDB (object):
 			`low` DECIMAL(32, 16) DEFAULT 0,
 			`close` DECIMAL(32, 16) DEFAULT 0,
 			`volume` DECIMAL(32, 16) DEFAULT 0,
+			`extra` TEXT,
 			UNIQUE KEY `tssym` (`ts`, `symbol`),
 			UNIQUE KEY `symts` (`symbol`, `ts`),
 			KEY(`ts`),
@@ -628,7 +634,7 @@ class CandleDB (object):
 
 	def candle_read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume '
+		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from {} where symbol = %s '.format(tabname)
 		sql += ' and ts >= %s and ts < %s order by ts;'
 		record = []
@@ -643,7 +649,7 @@ class CandleDB (object):
 	# pos: head(-2), tail(-1)
 	def candle_pick (self, symbol, pos, mode = 'd'):
 		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume from %s'%tabname
+		sql = 'select ts, open, high, low, close, volume, extra from %s'%tabname
 		with self.__conn as c:
 			if pos < 0:
 				if pos == -1:
@@ -667,8 +673,9 @@ class CandleDB (object):
 		else:
 			records = [ candle.record() for candle in candles ]
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
-		sql = 'REPLACE INTO %s (symbol, ts, open, high, low, close, volume)'%tabname
-		sql += " values(\'{}\', %s, %s, %s, %s, %s, %s);".format(symbol)
+		sql = 'REPLACE INTO %s'%tabname
+		sql += ' (symbol, ts, open, high, low, close, volume, extra)'
+		sql += " values(\'{}\', %s, %s, %s, %s, %s, %s, %s);".format(symbol)
 		try:
 			with self.__conn as c:
 				c.executemany(sql, records)
@@ -848,7 +855,7 @@ if __name__ == '__main__':
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
-			records1.append(CandleStick(i, 100, time.time()))
+			records1.append(CandleStick(i, 100, time.time(), e = 'f%d'%i))
 			records2.append(CandleStick(1000000 + i))
 		cc = CandleLite('candrec.db')
 		# cc = CandleLite(':memory:')
@@ -902,7 +909,7 @@ if __name__ == '__main__':
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
-			records1.append(CandleStick(i))
+			records1.append(CandleStick(i, 100, time.time(), e = 'f%d'%i))
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
 		cc = CandleDB(my, init = True)
@@ -958,7 +965,7 @@ if __name__ == '__main__':
 			print(tick)
 		return 0
 
-	test5()
+	test4()
 
 
 
