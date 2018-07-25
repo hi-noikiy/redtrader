@@ -262,12 +262,11 @@ class CandleLite (object):
 		else:
 			record = tuple(candle)
 		symbol = symbol.replace('\'', '').replace('"', '')
-		sql1 = 'INSERT OR IGNORE INTO %s (symbol, ts, open, high, low, close, volume)'
-		sql1 = sql1%tabname + " values('%s', ?, ?, ?, ?, ?, ?);"%symbol
+		sql1 = 'INSERT OR IGNORE INTO %s (symbol, ts) VALUES(?, ?)'%tabname
 		sql2 = 'UPDATE %s SET open=?, high=?, low=?, close=?, volume=?'%tabname
 		sql2 += ' WHERE ts=? and symbol=?'
 		try:
-			self.__conn.execute(sql1, record)
+			self.__conn.execute(sql1, (symbol, record[0]))
 			self.__conn.execute(sql2, list(record[1:]) + [record[0], symbol])
 		except sqlite3.InternalError as e:
 			self.out(str(e))
