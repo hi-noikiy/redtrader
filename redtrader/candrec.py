@@ -22,7 +22,8 @@ try:
 except:
 	import simplejson as json
 
-MySQLdb = None
+# MySQLdb = None
+import MySQLdb
 
 
 #----------------------------------------------------------------------
@@ -251,7 +252,7 @@ class CandleLite (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
+	def write (self, symbol, candle, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
 		record = None
 		if isinstance(candle, CandleStick):
@@ -261,11 +262,13 @@ class CandleLite (object):
 		else:
 			record = tuple(candle)
 		symbol = symbol.replace('\'', '').replace('"', '')
-		sql = '%s INTO %s (symbol, ts, open, high, low, close, volume)'
-		sql = sql%(rep and 'REPLACE' or 'INSERT', tabname)
-		sql += " values('%s', ?, ?, ?, ?, ?, ?);"%symbol
+		sql1 = 'INSERT OR IGNORE INTO %s (symbol, ts, open, high, low, close, volume)'
+		sql1 = sql1%tabname + " values('%s', ?, ?, ?, ?, ?, ?);"%symbol
+		sql2 = 'UPDATE %s SET open=?, high=?, low=?, close=?, volume=?'%tabname
+		sql2 += ' WHERE ts=? and symbol=?'
 		try:
-			self.__conn.execute(sql, record)
+			self.__conn.execute(sql1, record)
+			self.__conn.execute(sql2, list(record[1:]) + [record[0], symbol])
 		except sqlite3.InternalError as e:
 			self.out(str(e))
 			return False
@@ -608,7 +611,7 @@ class CandleDB (object):
 			return None
 		return CandleStick(*record).decimal(self.decimal)
 
-	def write (self, symbol, candle, mode = 'd', rep = True, commit = True):
+	def write (self, symbol, candle, mode = 'd', commit = True):
 		tabname = self.__get_table_name(mode)
 		record = None
 		if isinstance(candle, CandleStick):
@@ -618,12 +621,11 @@ class CandleDB (object):
 		else:
 			record = tuple(candle)
 		symbol = symbol.replace('\'', '').replace('"', '')
-		sql = '%s INTO %s (symbol, ts, open, high, low, close, volume)'
-		sql = sql%(rep and 'REPLACE' or 'INSERT', tabname)
-		sql += " values('{}', %s, %s, %s, %s, %s, %s);".format(symbol)
+		sql = 'REPLACE INTO %s (symbol, ts, open, high, low, close, volume)'%tabname
+		sql += " values(%s, %s, %s, %s, %s, %s, %s);"
 		try:
 			with self.__conn as c:
-				c.execute(sql, record)
+				c.execute(sql, [symbol] + list(record))
 			if commit:
 				self.__conn.commit()
 		except MySQLdb.Error as e:
@@ -749,10 +751,10 @@ if __name__ == '__main__':
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
-		hr = cc.write('ETH/USDT', c1, rep = True)
-		hr = cc.write('ETH/USDT', c2, rep = True)
-		hr = cc.write('ETH/USDT', c2, rep = True)
-		hr = cc.write('ETH/USDT', c3, rep = True)
+		hr = cc.write('ETH/USDT', c1)
+		hr = cc.write('ETH/USDT', c2)
+		hr = cc.write('ETH/USDT', c2)
+		hr = cc.write('ETH/USDT', c3)
 		print(hr)
 		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
@@ -761,10 +763,11 @@ if __name__ == '__main__':
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
-			records1.append(CandleStick(i))
+			records1.append(CandleStick(i, 100, time.time()))
 			records2.append(CandleStick(1000000 + i))
 		cc = CandleLite('candrec.db')
 		# cc = CandleLite(':memory:')
+		cc.decimal = False
 		print(cc.uri)
 		print('remove')
 		cc.delete_all('ETH/USDT')
@@ -801,10 +804,10 @@ if __name__ == '__main__':
 		c1 = CandleStick(1, 2, 3, 4, 5, 100)
 		c2 = CandleStick(2, 2, 3, 4, 5, 100)
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
-		hr = cc.write('ETH/USDT', c1, rep = True)
-		hr = cc.write('ETH/USDT', c2, rep = True)
-		hr = cc.write('ETH/USDT', c2, rep = True)
-		hr = cc.write('ETH/USDT', c3, rep = True)
+		hr = cc.write('ETH/USDT', c1)
+		hr = cc.write('ETH/USDT', c2)
+		hr = cc.write('ETH/USDT', c2)
+		hr = cc.write('ETH/USDT', c3)
 		print(hr)
 		for n in cc.read('ETH/USDT', 0, 0xffffffff):
 			print(n)
@@ -848,7 +851,7 @@ if __name__ == '__main__':
 		print(cc.mtime, cc.ctime)
 		return 0
 
-	test4()
+	test2()
 
 
 
