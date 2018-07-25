@@ -49,10 +49,6 @@ class CandleStick (object):
 		text = 'CandleStick({}, {}, {}, {}, {}, {})'
 		v = self.ts, self.open, self.high, self.low, self.close, self.volume
 		return text.format(*v)
-	def __str__ (self):
-		text = 'ts={}, open={}, high={}, low={}, close={}, vol={}'
-		v = self.ts, self.open, self.high, self.low, self.close, self.volume
-		return '{' + text.format(*v) + '}'
 	def __add__ (self, other):
 		nc = CandleStick(min(self.t, other.t),
 			self.open, max(self.high, other.high),
@@ -79,6 +75,20 @@ class CandleStick (object):
 
 
 #----------------------------------------------------------------------
+# TickData
+#----------------------------------------------------------------------
+class TickData (object):
+	def __init__ (self, ts, obj):
+		self.ts = ts
+		self.obj = obj
+	def __repr__ (self):
+		return 'TickData({}, {})'.format(self.ts, repr(self.obj))
+	def record (self):
+		return (self.ts, json.dumps(self.obj))
+
+
+
+#----------------------------------------------------------------------
 # CandleLite
 #----------------------------------------------------------------------
 class CandleLite (object):
@@ -94,6 +104,8 @@ class CandleLite (object):
 			self.uri = 'sqlite://' + self.__dbname
 		else:
 			self.uri = 'sqlite://' + self.__dbname.replace('\\', '/')
+		self.ctime = None
+		self.atime = None
 		self.__open()
 
 	def __open (self):
@@ -201,6 +213,9 @@ class CandleLite (object):
 	def __get_table_name (self, mode):
 		return self.__tabname[str(mode).lower()]
 
+	def __get_tick_table (self, mode):
+		return 'tick_{}'.format(str(mode))
+
 	def read (self, symbol, start, end, mode = 'd'):
 		tabname = self.__get_table_name(mode)
 		sql = 'select ts, open, high, low, close, volume '
@@ -216,24 +231,20 @@ class CandleLite (object):
 		c.close()
 		return record
 
-	def read_first (self, symbol, mode = 'd'):
+	# pos: head(-2), tail(-1)	
+	def pick (self, symbol, pos, mode = 'd'):
 		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume '
-		sql += ' from %s where symbol = ? order by ts limit 1;'%tabname
 		c = self.__conn.cursor()
-		c.execute(sql, (symbol, ))
-		record = c.fetchone()
-		c.close()
-		if record is None:
-			return None
-		return CandleStick(*record).decimal(self.decimal)
-
-	def read_last (self, symbol, mode = 'd'):
-		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume '
-		sql += ' from %s where symbol = ? order by ts desc limit 1;'%tabname
-		c = self.__conn.cursor()
-		c.execute(sql, (symbol, ))
+		sql = 'select ts, open, high, low, close, volume from %s'%tabname
+		if pos < 0:
+			if pos == -1:
+				sql += ' where symbol = ? order by ts desc limit 1;'
+			else:
+				sql += ' where symbol = ? order by ts limit 1;'
+			c.execute(sql, (symbol, ))
+		else:
+			sql += ' where symbol = ? and ts <= ? order by ts desc limit 1;'
+			c.execute(sql, (symbol, pos))
 		record = c.fetchone()
 		c.close()
 		if record is None:
@@ -299,6 +310,19 @@ class CandleLite (object):
 			return False
 		return True
 
+	def tick_read (self, symbol, start, end, mode = 1):
+		tabname = self.__get_tick_table(mode)
+		sql = 'select ts, data from {} where symbol = ?'.format(tabname)
+		sql += ' and ts >= ? and ts < ? order by ts;'
+		record = []
+		c = self.__conn.cursor()
+		c.execute(sql, (symbol, start, end))
+		for obj in c.fetchall():
+			td = TickData(obj[0], json.loads(obj[1]))
+			record.append(td)
+		c.close()
+		return record
+
 	# write meta information
 	def meta_write (self, name, value, commit = True):
 		sql1 = 'insert or ignore into meta(name, value, ctime, mtime)'
@@ -318,10 +342,12 @@ class CandleLite (object):
 	# read meta infomation
 	def meta_read (self, name):
 		c = self.__conn.cursor()
-		c.execute('select value from meta where name=?;', (name,))
+		c.execute('select value, ctime, mtime from meta where name=?;', (name,))
 		record = c.fetchone()
 		if record is None:
 			return None
+		self.ctime = record[1]
+		self.mtime = record[2]
 		return json.loads(record[0])
 
 
@@ -359,6 +385,8 @@ class CandleDB (object):
 		if 'port' in argv:
 			self.uri += ':' + str(argv['port'])
 		self.uri += '/' + argv['db']
+		self.ctime = None
+		self.mtime = None
 		self.__open()
 
 	def __mysql_startup (self):
@@ -537,23 +565,21 @@ class CandleDB (object):
 				record.append(cs)
 		return record
 
-	def read_first (self, symbol, mode = 'd'):
+	# pos: head(-2), tail(-1)
+	def pick (self, symbol, pos, mode = 'd'):
 		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume '
-		sql += ' from {} where symbol = %s order by ts limit 1;'
+		sql = 'select ts, open, high, low, close, volume from %s'%tabname
 		with self.__conn as c:
-			c.execute(sql.format(tabname), (symbol, ))
-			record = c.fetchone()
-		if record is None:
-			return None
-		return CandleStick(*record).decimal(self.decimal)
-
-	def read_last (self, symbol, mode = 'd'):
-		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume '
-		sql += ' from {} where symbol = %s order by ts desc limit 1;'
-		with self.__conn as c:
-			c.execute(sql.format(tabname), (symbol, ))
+			if pos < 0:
+				if pos == -1:
+					sql += ' where symbol = %s order by ts desc limit 1;'
+					c.execute(sql, (symbol, ))
+				else:
+					sql += ' where symbol = %s order by ts limit 1;'
+					c.execute(sql, (symbol, ))
+			else:
+				sql += ' where symbol = %s and ts <= %s order by ts desc limit 1;'
+				c.execute(sql, (symbol, pos))
 			record = c.fetchone()
 		if record is None:
 			return None
@@ -633,10 +659,12 @@ class CandleDB (object):
 	# read meta infomation
 	def meta_read (self, name):
 		with self.__conn as c:
-			c.execute('select value from meta where name=%s;', (name,))
+			c.execute('select value, ctime, mtime from meta where name=%s;', (name,))
 			record = c.fetchone()
 		if record is None:
 			return None
+		self.ctime = record[1]
+		self.mtime = record[2]
 		return json.loads(record[0])
 
 
@@ -695,17 +723,20 @@ if __name__ == '__main__':
 			cc.write('ETH/USDT', rec, commit = False)
 		cc.commit()
 		print('time', time.time() - t1)
-		print(cc.read_first('ETH/USDT'))
-		print(cc.read_last('ETH/USDT'))
+		print(cc.pick('ETH/USDT', -2))
+		print(cc.pick('ETH/USDT', -1))
+		print(cc.pick('ETH/USDT', 50))
 		print()
 		for n in cc.read('ETH/USDT', 10, 20):
 			print(n)
 		print()
-		cc.meta_write('name', 'skywind', False)
+		cc.meta_write('name', 'skywind')
 		print(cc.meta_read('name'))
-		cc.meta_write('nAme', 'linwei', False)
+		print(cc.mtime, cc.ctime)
+		cc.meta_write('nAme', 'linwei')
 		cc.commit()
 		print(cc.meta_read('Name'))
+		print(cc.mtime, cc.ctime)
 		return 0
 	def test3():
 		cc = CandleDB(my, init = True)
@@ -746,17 +777,20 @@ if __name__ == '__main__':
 			cc.write('ETH/USDT', rec, commit = False)
 		cc.commit()
 		print('time', time.time() - t1)
-		print(cc.read_first('ETH/USDT'))
-		print(cc.read_last('ETH/USDT'))
+		print(cc.pick('ETH/USDT', -2))
+		print(cc.pick('ETH/USDT', -1))
+		print(cc.pick('ETH/USDT', 50))
 		print()
 		for n in cc.read('ETH/USDT', 10, 20):
 			print(n)
 		print()
-		cc.meta_write('name', 'skywind', False)
+		cc.meta_write('name', 'skywind')
 		print(cc.meta_read('name'))
-		cc.meta_write('nAme', 'linwei', False)
+		print(cc.mtime, cc.ctime)
+		cc.meta_write('nAme', 'linwei')
 		cc.commit()
 		print(cc.meta_read('Name'))
+		print(cc.mtime, cc.ctime)
 		return 0
 
 	test4()
