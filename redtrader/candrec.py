@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/07/26 00:30
+# Last Modified: 2018/07/26 11:54
 #
 #======================================================================
 from __future__ import print_function
@@ -39,18 +39,19 @@ if sys.version_info[0] >= 3:
 # CandleStick
 #----------------------------------------------------------------------
 class CandleStick (object):
-	def __init__ (self, t = 0, o = 0, H = 0, L = 0, c = 0, v = 0, e = None):
-		self.ts = t
-		self.open = o
-		self.high = H
-		self.low = L
-		self.close = c
-		self.volume = v
-		self.extra = e
+	def __init__ (self, ts = 0, open = 0, high = 0, low = 0, 
+			close = 0, volume = 0, extra = None):
+		self.ts = ts
+		self.open = open
+		self.high = high
+		self.low = low
+		self.close = close
+		self.volume = volume
+		self.extra = extra
 	def __repr__ (self):
 		text = 'CandleStick({}, {}, {}, {}, {}, {}, {})'
-		v = (self.ts, self.open, self.high, self.low, 
-				self.close, self.volume, repr(self.extra))
+		v = (self.ts, repr(self.open), repr(self.high), repr(self.low), 
+				repr(self.close), repr(self.volume), repr(self.extra))
 		return text.format(*v)
 	def __add__ (self, other):
 		nc = CandleStick(min(self.t, other.t),
@@ -58,24 +59,6 @@ class CandleStick (object):
 			min(self.low, other.low), other.close,
 			self.volume + other.volume)
 		return nc
-	def decimal (self, enable):
-		if enable:
-			self.open = decimal.Decimal(self.open)
-			self.high = decimal.Decimal(self.high)
-			self.low = decimal.Decimal(self.low)
-			self.close = decimal.Decimal(self.close)
-			self.volume = decimal.Decimal(self.volume)
-		else:
-			self.open = float(self.open)
-			self.high = float(self.high)
-			self.low = float(self.low)
-			self.close = float(self.close)
-			self.volume = float(self.volume)
-		return self
-	def record (self):
-		v = (self.ts, self.open, self.high, self.low, 
-				self.close, self.volume, self.extra)
-		return v
 
 
 #----------------------------------------------------------------------
@@ -87,9 +70,6 @@ class TickData (object):
 		self.obj = obj
 	def __repr__ (self):
 		return 'TickData({}, {})'.format(self.ts, repr(self.obj))
-	def record (self):
-		return (self.ts, json.dumps(self.obj))
-
 
 
 #----------------------------------------------------------------------
@@ -103,7 +83,7 @@ class CandleLite (object):
 			os.path.abspath(filename)
 		self.__conn = None
 		self.verbose = verbose
-		self.decimal = True
+		self.decimal = 0
 		if sys.platform[:3] != 'win':
 			self.uri = 'sqlite://' + self.__dbname
 		else:
@@ -220,14 +200,69 @@ class CandleLite (object):
 			self.__conn.commit()
 		return True
 
-	def __get_table_name (self, mode):
+	def __get_candle_table (self, mode):
 		return self.__tabname[str(mode).lower()]
 
 	def __get_tick_table (self, mode):
 		return 'tick_{}'.format(str(mode))
 
+	def __record2candle (self, record):
+		if record is None:
+			return None
+		cs = CandleStick()
+		cs.ts = int(record[0])
+		if self.decimal == 0:
+			cs.open = record[1]
+			cs.high = record[2]
+			cs.low = record[3]
+			cs.close = record[4]
+			cs.volume = record[5]
+		elif self.decimal == 1:
+			cs.open = decimal.Decimal(record[1])
+			cs.high = decimal.Decimal(record[2])
+			cs.low = decimal.Decimal(record[3])
+			cs.close = decimal.Decimal(record[4])
+			cs.volume = decimal.Decimal(record[5])
+		else:
+			cs.open = float(record[1])
+			cs.high = float(record[2])
+			cs.low = float(record[3])
+			cs.close = float(record[4])
+			cs.volume = float(record[5])
+		if record[6] is None:
+			cs.extra = None
+		else:
+			try:
+				cs.extra = json.loads(record[6])
+			except:
+				pass
+		return cs
+
+	def __candle2record (self, cs):
+		e = None
+		if cs.extra is not None:
+			e = json.dumps(cs.extra)
+		return (cs.ts, cs.open, cs.high, cs.low, cs.close, cs.volume, e)
+
+	def __record2tick (self, record):
+		if record is None:
+			return None
+		tick = TickData(record[0], None)
+		if record[1] is not None:
+			try:
+				tick.obj = json.loads(record[1])
+			except:
+				pass
+		return tick
+
+	def __tick2record (self, tick):
+		e = None
+		if tick.obj is not None:
+			e = json.dumps(tick.obj)
+		return (tick.ts, e)
+
 	def candle_read (self, symbol, start, end, mode = 'd'):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from %s where symbol = ? '%tabname
 		sql += ' and ts >= ? and ts < ? order by ts;'
@@ -235,15 +270,15 @@ class CandleLite (object):
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, start, end))
 		for obj in c.fetchall():
-			cs = CandleStick(*obj)
-			cs.decimal(self.decimal)
-			record.append(cs)
+			cs = self.__record2candle(obj)
+			if cs is not None:
+				record.append(cs)
 		c.close()
 		return record
 
 	# pos: head(-2), tail(-1)	
 	def candle_pick (self, symbol, pos, mode = 'd'):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		c = self.__conn.cursor()
 		sql = 'select ts, open, high, low, close, volume, extra from %s'%tabname
 		if pos < 0:
@@ -257,16 +292,14 @@ class CandleLite (object):
 			c.execute(sql, (symbol, pos))
 		record = c.fetchone()
 		c.close()
-		if record is None:
-			return None
-		return CandleStick(*record).decimal(self.decimal)
+		return self.__record2candle(record)
 
 	def candle_write (self, symbol, candles, mode = 'd', commit = True):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		if isinstance(candles, CandleStick):
-			records = [ candles.record() ]
+			records = [ self.__candle2record(candles) ]
 		else:
-			records = [ candle.record() for candle in candles ]
+			records = [ self.__candle2record(candle) for candle in candles ]
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s '%tabname
 		sql += '(symbol, ts, open, high, low, close, volume, extra)'
@@ -284,7 +317,7 @@ class CandleLite (object):
 		return True
 
 	def candle_erase (self, symbol, start, end, mode = 'd', commit = True):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'DELETE FROM %s WHERE symbol = ? and ts >= ? and ts < ?;'
 		try:
 			self.__conn.execute(sql%tabname, (symbol, start, end))
@@ -299,7 +332,7 @@ class CandleLite (object):
 		return True
 
 	def candle_empty (self, symbol, mode = 'd'):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'DELETE FROM %s WHERE symbol = ?;'%tabname
 		try:
 			self.__conn.execute(sql, (symbol, ))
@@ -320,8 +353,9 @@ class CandleLite (object):
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, start, end))
 		for obj in c.fetchall():
-			td = TickData(obj[0], json.loads(obj[1]))
-			record.append(td)
+			tick = self.__record2tick(obj)
+			if tick is not None: 
+				record.append(tick)
 		c.close()
 		return record
 
@@ -341,16 +375,14 @@ class CandleLite (object):
 			c.execute(sql, (symbol, pos))
 		record = c.fetchone()
 		c.close()
-		if record is None:
-			return None
-		return TickData(record[0], json.loads(record[1]))
+		return self.__record2tick(record)
 
 	def tick_write (self, symbol, ticks, mode = 1, commit = True):
 		tabname = self.__get_tick_table(mode)
 		if isinstance(ticks, TickData):
-			records = [ ticks.record() ]
+			records = [ self.__tick2record(ticks) ]
 		else:
-			records = [ tick.record() for tick in ticks ]
+			records = [ self.__tick2record(tick) for tick in ticks ]
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s (symbol, ts, data) '%tabname
 		sql += ' VALUES (\'{}\', ?, ?);'.format(symbol)
@@ -444,7 +476,7 @@ class CandleDB (object):
 		self.__conn = None
 		self.verbose = verbose
 		self.__init = init
-		self.decimal = True
+		self.decimal = 0
 		if 'db' not in argv:
 			raise KeyError('not find db name')
 		self.uri = 'mysql://'
@@ -626,14 +658,69 @@ class CandleDB (object):
 			self.__conn.commit()
 		return True
 
-	def __get_table_name (self, mode):
+	def __get_candle_table (self, mode):
 		return self.__tabname[str(mode).lower()]
 
 	def __get_tick_table (self, mode):
 		return 'tick_{}'.format(str(mode))
 
+	def __record2candle (self, record):
+		if record is None:
+			return None
+		cs = CandleStick()
+		cs.ts = int(record[0])
+		if self.decimal == 0:
+			cs.open = record[1]
+			cs.high = record[2]
+			cs.low = record[3]
+			cs.close = record[4]
+			cs.volume = record[5]
+		elif self.decimal == 1:
+			cs.open = decimal.Decimal(record[1])
+			cs.high = decimal.Decimal(record[2])
+			cs.low = decimal.Decimal(record[3])
+			cs.close = decimal.Decimal(record[4])
+			cs.volume = decimal.Decimal(record[5])
+		else:
+			cs.open = float(record[1])
+			cs.high = float(record[2])
+			cs.low = float(record[3])
+			cs.close = float(record[4])
+			cs.volume = float(record[5])
+		if record[6] is None:
+			cs.extra = None
+		else:
+			try:
+				cs.extra = json.loads(record[6])
+			except:
+				pass
+		return cs
+
+	def __candle2record (self, cs):
+		e = None
+		if cs.extra is not None:
+			e = json.dumps(cs.extra)
+		return (cs.ts, cs.open, cs.high, cs.low, cs.close, cs.volume, e)
+
+	def __record2tick (self, record):
+		if record is None:
+			return None
+		tick = TickData(record[0], None)
+		if record[1] is not None:
+			try:
+				tick.obj = json.loads(record[1])
+			except:
+				pass
+		return tick
+
+	def __tick2record (self, tick):
+		e = None
+		if tick.obj is not None:
+			e = json.dumps(tick.obj)
+		return (tick.ts, e)
+
 	def candle_read (self, symbol, start, end, mode = 'd'):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from {} where symbol = %s '.format(tabname)
 		sql += ' and ts >= %s and ts < %s order by ts;'
@@ -641,14 +728,14 @@ class CandleDB (object):
 		with self.__conn as c:
 			c.execute(sql, (symbol, start, end))
 			for obj in c.fetchall():
-				cs = CandleStick(*obj)
-				cs.decimal(self.decimal)
-				record.append(cs)
+				cs = self.__record2candle(obj)
+				if cs is not None:
+					record.append(cs)
 		return record
 
 	# pos: head(-2), tail(-1)
 	def candle_pick (self, symbol, pos, mode = 'd'):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra from %s'%tabname
 		with self.__conn as c:
 			if pos < 0:
@@ -662,16 +749,14 @@ class CandleDB (object):
 				sql += ' where symbol = %s and ts <= %s order by ts desc limit 1;'
 				c.execute(sql, (symbol, pos))
 			record = c.fetchone()
-		if record is None:
-			return None
-		return CandleStick(*record).decimal(self.decimal)
+		return self.__record2candle(record)
 
 	def candle_write (self, symbol, candles, mode = 'd', commit = True):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		if isinstance(candles, CandleStick):
-			records = [candles.record()]
+			records = [ self.__candle2record(candles) ]
 		else:
-			records = [ candle.record() for candle in candles ]
+			records = [ self.__candle2record(candle) for candle in candles ]
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s'%tabname
 		sql += ' (symbol, ts, open, high, low, close, volume, extra)'
@@ -687,7 +772,7 @@ class CandleDB (object):
 		return True
 
 	def candle_erase (self, symbol, start, end, mode = 'd', commit = True):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'DELETE FROM {} WHERE symbol = %s and ts >= %s and ts < %s;'
 		try:
 			with self.__conn as c:
@@ -700,7 +785,7 @@ class CandleDB (object):
 		return True
 
 	def candle_empty (self, symbol, mode = 'd'):
-		tabname = self.__get_table_name(mode)
+		tabname = self.__get_candle_table(mode)
 		sql = 'DELETE FROM {} WHERE symbol = %s;'.format(tabname)
 		try:
 			with self.__conn as c:
@@ -719,14 +804,15 @@ class CandleDB (object):
 		with self.__conn as c:
 			c.execute(sql, (symbol, start, end))
 			for obj in c.fetchall():
-				td = TickData(obj[0], json.loads(obj[1]))
-				record.append(td)
+				tick = self.__record2tick(obj)
+				if tick is not None:
+					record.append(tick)
 		return record
 
 	# pos: head(-2), tail(-1)
 	def tick_pick (self, symbol, pos, mode = 1):
-		tabname = self.__get_table_name(mode)
-		sql = 'select ts, open, high, low, close, volume from %s'%tabname
+		tabname = self.__get_tick_table(mode)
+		sql = 'select ts, data from %s'%tabname
 		with self.__conn as c:
 			if pos < 0:
 				if pos == -1:
@@ -739,16 +825,14 @@ class CandleDB (object):
 				sql += ' where symbol = %s and ts <= %s order by ts desc limit 1;'
 				c.execute(sql, (symbol, pos))
 			record = c.fetchone()
-		if record is None:
-			return None
-		return CandleStick(*record).decimal(self.decimal)
+		return self.__record2tick(record)
 
 	def tick_write (self, symbol, ticks, mode = 1, commit = True):
 		tabname = self.__get_tick_table(mode)
 		if isinstance(ticks, TickData):
-			records = [ ticks.record() ]
+			records = [ self.__tick2record(ticks) ]
 		else:
-			records = [ tick.record() for tick in ticks ]
+			records = [ self.__tick2record(tick) for tick in ticks ]
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s (symbol, ts, data)'%tabname
 		sql += " values(\'{}\', %s, %s);".format(symbol)
@@ -840,8 +924,8 @@ if __name__ == '__main__':
 		cc = CandleLite('candrec.db')
 		cc.verbose = True
 		cc.candle_empty('ETH/USDT')
-		c1 = CandleStick(1, 2, 3, 4, 5, 100)
-		c2 = CandleStick(2, 2, 3, 4, 5, 100)
+		c1 = CandleStick(1, 2, 3, 4, 5, 100, {'name': 'skywind'})
+		c2 = CandleStick(2, 2, 3, 4, 5, 100, 'haha')
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
 		hr = cc.candle_write('ETH/USDT', c1)
 		hr = cc.candle_write('ETH/USDT', c2)
@@ -855,11 +939,11 @@ if __name__ == '__main__':
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
-			records1.append(CandleStick(i, 100, time.time(), e = 'f%d'%i))
+			records1.append(CandleStick(i, 100, time.time(), extra = 'f%d'%i))
 			records2.append(CandleStick(1000000 + i))
 		cc = CandleLite('candrec.db')
 		# cc = CandleLite(':memory:')
-		cc.decimal = False
+		cc.decimal = 2
 		print(cc.uri)
 		print('remove')
 		cc.candle_empty('ETH/USDT')
@@ -869,8 +953,6 @@ if __name__ == '__main__':
 			cc.candle_write('ETH/USDT', rec, commit = False)
 		print('time', time.time() - t1)
 		t1 = time.time()
-		# for rec in records2:
-		# 	cc.candle_write('ETH/USDT', rec, commit = False)
 		cc.candle_write('ETH/USDT', records2, commit = False)
 		cc.commit()
 		print('time', time.time() - t1)
@@ -892,10 +974,10 @@ if __name__ == '__main__':
 	def test3():
 		cc = CandleDB(my, init = True)
 		cc.verbose = True
-		cc.decimal = False
+		cc.decimal = 2
 		cc.candle_empty('ETH/USDT')
-		c1 = CandleStick(1, 2, 3, 4, 5, 100)
-		c2 = CandleStick(2, 2, 3, 4, 5, 100)
+		c1 = CandleStick(1, 2, 3, 4, 5, 100, {'name': 'skywind'})
+		c2 = CandleStick(2, 2, 3, 4, 5, 100, 'haha')
 		c3 = CandleStick(3, 2, 3, 4, 5, 100)
 		hr = cc.candle_write('ETH/USDT', c1)
 		hr = cc.candle_write('ETH/USDT', c2)
@@ -909,12 +991,12 @@ if __name__ == '__main__':
 		records1 = []
 		records2 = []
 		for i in xrange(1000):
-			records1.append(CandleStick(i, 100, time.time(), e = 'f%d'%i))
+			records1.append(CandleStick(i, 100, time.time(), extra = 'f%d'%i))
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
 		cc = CandleDB(my, init = True)
 		print(cc.uri)
-		cc.decimal = False
+		cc.decimal = 2
 		cc.verbose = True
 		print('remove')
 		cc.candle_empty('ETH/USDT')
@@ -957,6 +1039,7 @@ if __name__ == '__main__':
 		cc.tick_write(symbol, TickData(20, 'suck'))
 		cc.tick_write(symbol, TickData(30, 'you'))
 		cc.tick_write(symbol, TickData(35, 'foo'))
+		cc.commit()
 		print(cc.tick_pick(symbol, -2))
 		print(cc.tick_pick(symbol, -1))
 		print(cc.tick_pick(symbol, 20))
@@ -965,7 +1048,7 @@ if __name__ == '__main__':
 			print(tick)
 		return 0
 
-	test5()
+	test4()
 
 
 
