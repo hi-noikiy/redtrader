@@ -1004,11 +1004,13 @@ if __name__ == '__main__':
 			records1.append(CandleStick(i, 100, time.time(), extra = 'f%d'%i))
 			records2.append(CandleStick(1000000 + i))
 		# cc = CandleLite('test.db')
+		ts = time.time()
 		cc = CandleDB(my, init = True)
+		ts = time.time() - ts
 		print(cc.uri)
 		cc.decimal = 2
 		cc.verbose = True
-		print('remove')
+		print('init', ts)
 		cc.candle_empty('ETH/USDT')
 		print('begin')
 		t1 = time.time()
@@ -1078,7 +1080,7 @@ if __name__ == '__main__':
 			print(candle)
 		return 0
 
-	test6()
+	test5()
 
 
 
