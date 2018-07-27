@@ -902,8 +902,18 @@ class CandleDB (object):
 
 
 #----------------------------------------------------------------------
-# connect
+# ToolHelp
 #----------------------------------------------------------------------
+class ToolHelp (object):
+	def __init__ (self):
+		self.datefmt = '%Y-%m-%d %H:%M:%S'
+
+
+#----------------------------------------------------------------------
+# useful functions
+#----------------------------------------------------------------------
+tools = ToolHelp()
+
 def connect(uri):
 	head = 'sqlite://'
 	if uri.startswith(head):
@@ -1047,8 +1057,28 @@ if __name__ == '__main__':
 		for tick in cc.tick_read(symbol, 0, 0xffffffff):
 			print(tick)
 		return 0
+	def test6():
+		uri = 'mysql://skywind:000000@127.0.0.1/skywind_t2'
+		# uri = 'sqlite://candrec.db'
+		cc = connect(uri)
+		cc.verbose = True
+		sym1 = 'BTC/USDT'
+		sym2 = 'EOS/USDT'
+		cc.decimal = 2
+		cc.candle_write(sym1, CandleStick(1, 10, 20, 30))
+		cc.candle_write(sym1, CandleStick(2, 10, 20, 30))
+		cc.candle_write(sym1, CandleStick(3, 10, 20, 30))
+		cc.candle_write(sym2, CandleStick(10, 80, 90))
+		cc.candle_write(sym2, CandleStick(20, 81, 95))
+		cc.candle_write(sym2, CandleStick(30, 82, 99))
+		for candle in cc.candle_read(sym1, 0, 0xffff):
+			print(candle)
+		print()
+		for candle in cc.candle_read(sym2, 0, 0xffff):
+			print(candle)
+		return 0
 
-	test4()
+	test6()
 
 
 
