@@ -914,12 +914,12 @@ class ToolHelp (object):
 #----------------------------------------------------------------------
 tools = ToolHelp()
 
-def connect(uri):
+def connect(uri, init = False):
 	head = 'sqlite://'
 	if uri.startswith(head):
 		cc = CandleLite(uri[len(head):])
 	elif uri.startswith('mysql://'):
-		cc = CandleDB(uri)
+		cc = CandleDB(uri, init = init)
 	else:
 		cc = CandleLite(uri)
 	return cc
