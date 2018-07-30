@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/07/26 11:54
+# Last Modified: 2018/07/30 16:44
 #
 #======================================================================
 from __future__ import print_function
