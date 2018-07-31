@@ -80,6 +80,8 @@ class CandleLite (object):
 	def __init__ (self, filename, verbose = False):
 		self.__dbname = filename
 		if filename != ':memory:':
+			if '~' in filename:
+				filename = os.path.expanduser(filename)
 			os.path.abspath(filename)
 		self.__conn = None
 		self.verbose = verbose
@@ -915,13 +917,25 @@ class ToolHelp (object):
 tools = ToolHelp()
 
 def connect(uri, init = False):
-	head = 'sqlite://'
-	if uri.startswith(head):
-		cc = CandleLite(uri[len(head):])
-	elif uri.startswith('mysql://'):
+	if uri.startswith('mysql://'):
 		cc = CandleDB(uri, init = init)
 	else:
-		cc = CandleLite(uri)
+		head = 'sqlite://'
+		if uri.startswith(head):
+			name = uri[len(head):]
+		else:
+			name = uri
+		print(name)
+		if name != ':memory:':
+			if '~' in name:
+				name = os.path.expanduser(name)
+			name = os.path.abspath(name)
+			if init:
+				dirname = os.path.dirname(name)
+				if not os.path.exists(dirname):
+					os.makedirs(dirname)
+		print(name)
+		cc = CandleLite(name)
 	return cc
 
 
@@ -1061,8 +1075,8 @@ if __name__ == '__main__':
 		return 0
 	def test6():
 		uri = 'mysql://skywind:000000@127.0.0.1/skywind_t2'
-		# uri = 'sqlite://candrec.db'
-		cc = connect(uri)
+		uri = 'sqlite://~/.cache/candle/candrec.db'
+		cc = connect(uri, True)
 		cc.verbose = True
 		sym1 = 'BTC/USDT'
 		sym2 = 'EOS/USDT'
@@ -1080,7 +1094,7 @@ if __name__ == '__main__':
 			print(candle)
 		return 0
 
-	test5()
+	test6()
 
 
 
