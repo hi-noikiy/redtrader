@@ -503,7 +503,11 @@ class CandleDB (object):
 			import MySQLdb as _mysql
 			MySQLdb = _mysql
 		except ImportError:
-			return False
+			try:
+				import pymysql
+				MySQLdb = pymysql
+			except ImportError:
+				return False
 		return True
 
 	def __open (self):
@@ -925,7 +929,6 @@ def connect(uri, init = False):
 			name = uri[len(head):]
 		else:
 			name = uri
-		print(name)
 		if name != ':memory:':
 			if '~' in name:
 				name = os.path.expanduser(name)
@@ -934,7 +937,6 @@ def connect(uri, init = False):
 				dirname = os.path.dirname(name)
 				if not os.path.exists(dirname):
 					os.makedirs(dirname)
-		print(name)
 		cc = CandleLite(name)
 	return cc
 
