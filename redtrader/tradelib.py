@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-# vim: set ts=4 sw=4 tw=0 noet :
 #======================================================================
 #
 # tradelib.py - 
@@ -15,6 +14,7 @@ import time
 import os
 import json
 import math
+import decimal
 
 
 #----------------------------------------------------------------------
@@ -147,16 +147,20 @@ class OrderBook (object):
 		return '%s(%s)'%(name, repr(self.save_dict()))
 
 	# best bid
-	def best_bid (self):
+	def best_bid (self, index = 0):
 		if not self.bids:
 			return None
-		return self.bids[0]
+		if index >= len(self.bids):
+			return None
+		return self.bids[index]
 
 	# best ask
-	def best_ask (self):
+	def best_ask (self, index = 0):
 		if not self.asks:
 			return None
-		return self.asks[0]
+		if index >= len(self.asks):
+			return None
+		return self.asks[index]
 
 	# fmt can be orgtbl
 	def tabulify (self, fmt = None):
@@ -240,7 +244,7 @@ class BookHelp (object):
 class BookView (object):
 
 	def __init__ (self):
-		self.minimal_amount = 0.01
+		self.minimal_amount = 0.001
 
 	def price_at_volume (self, orderbook, side, volume):
 		if side in ('buy', 'bid', 'bids', 'biding', 'buyer'):
@@ -293,8 +297,43 @@ class BookView (object):
 					return volume
 		return -1
 
+	def volume_at_level (self, orderbook, side, level):
+		volume = 0.0
+		if side in ('buy', 'bid', 'bids', 'biding', 'buyer'):
+			if not orderbook.bids:
+				return 0
+			for item in orderbook.bids:
+				volume += item[1]
+				if level <= 0:
+					break
+				level -= 1
+		else:
+			if not orderbook.asks:
+				return 0
+			for item in orderbook.asks:
+				volume += item[1]
+				if level <= 0:
+					break
+				level -= 1
+		return volume
+
+	def price_at_level (self, orderbook, side, level):
+		if side in ('buy', 'bid', 'bids', 'biding', 'buyer'):
+			if not orderbook.bids:
+				return -1
+			level = min(level, len(orderbook.bids) - 1)
+			return orderbook.bids[level][0]
+		else:
+			if not orderbook.asks:
+				return -1
+			level = min(level, len(orderbook.asks) - 1)
+			return orderbook.asks[level][0]
+		return -1
+
 	# returns (volume, totalcost) or None
-	def buy_budget_to_volume (self, orderbook, budget):
+	def buy_budget_to_volume (self, orderbook, budget, minlimit = None):
+		if minlimit is None:
+			minlimit = self.minimal_amount
 		volume = 0.0
 		cost = 0.0
 		for item in orderbook.asks:
@@ -303,7 +342,7 @@ class BookView (object):
 			total = item[2]
 			if budget < total:
 				size = budget / price
-				if size < self.minimal_amount:
+				if size < minlimit:
 					size = 0
 				volume += size
 				cost += size * price
@@ -317,7 +356,9 @@ class BookView (object):
 		return (volume, cost)
 
 	# returns (volume, profit) or None
-	def sell_volume_to_profit (self, orderbook, volume):
+	def sell_volume_to_profit (self, orderbook, volume, minlimit = None):
+		if minlimit is None:
+			minlimit = self.minimal_amount
 		sumvol = 0.0
 		profit = 0.0
 		for item in orderbook.bids:
@@ -338,6 +379,66 @@ class BookView (object):
 		if sumvol <= 0.0:
 			return None
 		return (sumvol, profit)
+
+	def currency_exchange (self, x, side, ob, factor = 1.5, minlimit = None):
+		if minlimit is None:
+			minlimit = self.minimal_amount
+		if side.lower() in ('buy', '>'):
+			res = self.buy_budget_to_volume(ob, x * factor, minlimit)
+			if res is None:
+				return -1
+			volume, cost = res
+			price = cost / volume
+			if price <= 0:
+				return -1
+			y = x / price
+		else:
+			res = self.sell_volume_to_profit(ob, x * factor, minlimit)
+			if res is None:
+				return -1
+			sumvol, profit = res
+			price = profit / sumvol
+			if price <= 0:
+				return -1
+			y = x * price
+		return y
+
+	def volume_reckon (self, ob, side, level, miny = None, minlimit = None):
+		if minlimit is None:
+			minlimit = self.minimal_amount
+		item = {}
+		if side in ('buy', '>'):
+			if not ob.asks:
+				return None
+			volume = self.volume_at_level(ob, 'ask', level)
+			price = self.price_at_level(ob, 'ask', level)
+			if price <= 0:
+				return None
+			if miny is not None:
+				volume = min(volume, miny)
+			if volume <= 0 or volume <= minlimit:
+				return None
+			item['y'] = volume
+			item['x'] = volume * price
+			item['price'] = price
+		else:
+			if not ob.bids:
+				return None
+			volume = self.volume_at_level(ob, 'bid', level)
+			price = self.price_at_level(ob, 'bid', level)
+			if price <= 0:
+				return None
+			if volume <= 0 or volume <= minlimit:
+				return None
+			item['x'] = volume
+			item['y'] = volume * price
+			item['price'] = price
+			if miny is not None:
+				if item['y'] > miny:
+					item['y'] = miny
+					item['x'] = miny / price
+		return item
+			
 
 
 
@@ -393,7 +494,19 @@ if __name__ == '__main__':
 		print(lbaeth.tabulify('orgtbl'))
 		return 0
 
-	test4()
+	def test5():
+		btcusdt = bookhelp.load_orderbook('ob-btc-usdt.txt')
+		print(btcusdt.tabulify('orgtbl'))
+		usdt = 41.4326
+		y = bookview.currency_exchange(usdt, '>', btcusdt)
+		print(y)
+		print('0>', bookview.volume_reckon(btcusdt, '>', 0))
+		print('1>', bookview.volume_reckon(btcusdt, '>', 1))
+		print('0<', bookview.volume_reckon(btcusdt, '<', 0))
+		print('1<', bookview.volume_reckon(btcusdt, '<', 1, 6000))
+		return 0
+
+	test5()
 
 
 
