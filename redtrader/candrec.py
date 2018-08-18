@@ -911,8 +911,16 @@ class CandleDB (object):
 # ToolHelp
 #----------------------------------------------------------------------
 class ToolHelp (object):
+
 	def __init__ (self):
 		self.datefmt = '%Y-%m-%d %H:%M:%S'
+
+	def ccxt_ohlcv (self, ohlcv):
+		records = []
+		for item in ohlcv:
+			cs = CandleStick(int(item[0] / 1000), *item[1:6])
+			records.append(cs)
+		return records
 
 
 #----------------------------------------------------------------------
