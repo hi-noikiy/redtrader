@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/07/30 16:44
+# Last Modified: 2018/08/20 20:26
 #
 #======================================================================
 from __future__ import print_function
@@ -54,7 +54,7 @@ class CandleStick (object):
 				repr(self.close), repr(self.volume), repr(self.extra))
 		return text.format(*v)
 	def __add__ (self, other):
-		nc = CandleStick(min(self.t, other.t),
+		nc = CandleStick(min(self.ts, other.ts),
 			self.open, max(self.high, other.high),
 			min(self.low, other.low), other.close,
 			self.volume + other.volume)
@@ -914,19 +914,137 @@ class ToolHelp (object):
 
 	def __init__ (self):
 		self.datefmt = '%Y-%m-%d %H:%M:%S'
+		self.timesize = {}
+		self.timesize['1'] = 60
+		self.timesize['5'] = 60 * 5
+		self.timesize['15'] = 60 * 15
+		self.timesize['30'] = 60 * 30
+		self.timesize['60'] = 60 * 60
+		self.timesize['h'] = 3600
+		self.timesize['d'] = 3600 * 24
+		self.timesize['w'] = 3600 * 24 * 7
+		self.timesize['M'] = 3600 * 24 * 30
 
-	def ccxt_ohlcv (self, ohlcv):
+	def compare (self, src, dst):
+		if src is dst:
+			return 0
+		if src.ts > dst.ts:
+			return 1
+		elif src.ts < dst.ts:
+			return -1
+		s = (src.open, src.high, src.low, src.close, src.volume, src.extra)
+		d = (dst.open, dst.high, dst.low, dst.close, dst.volume, dst.extra)
+		if s > d:
+			return 1
+		elif s < d:
+			return -1
+		return 0
+
+	def union (self, c1, c2):
+		c3 = c1 + c2
+		if isinstance(c3.volume, float):
+			v1 = decimal.Decimal(c1.volume)
+			v2 = decimal.Decimal(c2.volume)
+			c3.volume = float(v1 + v2)
+		return c3
+
+	def array_from_ccxt (self, ohlcv):
 		records = []
 		for item in ohlcv:
 			cs = CandleStick(int(item[0] / 1000), *item[1:6])
 			records.append(cs)
+		self.array_sort(records)
 		return records
+
+	def array_sort (self, array, reverse = False):
+		array.sort(key = lambda x: x.ts, reverse = reverse)
+		return array
+
+	def array_pick (self, array, ts):
+		if len(array) == 0:
+			return -1
+		if ts < array[0].ts:
+			return -1
+		elif ts >= array[-1].ts:
+			return len(array) - 1
+		top = 0
+		bottom = len(array) - 1
+		middle = top
+		while top < bottom:
+			middle = (top + bottom) >> 1
+			if top == middle or bottom == middle:
+				break
+			timestamp = array[middle].ts
+			if ts == timestamp:
+				break
+			elif ts < timestamp:
+				bottom = middle
+			elif ts > timestamp:
+				top = middle
+		limit = len(array) - 1
+		while middle < limit and array[middle + 1].ts < ts:
+			middle += 1
+		return middle
+
+	def array_step (self, array, ts, pos):
+		if len(array) == 0:
+			return -1
+		limit = len(array) - 1
+		while pos < limit and array[pos + 1].ts < ts:
+			pos += 1
+		return pos
+
+	def array_window (self, array, since, until):
+		out = []
+		if since is not None and until is not None:
+			for cs in array:
+				if cs.ts >= since and cs.ts < until:
+					out.append(cs)
+		elif until is not None:
+			for cs in array:
+				if cs.ts < until:
+					out.append(cs)
+		elif since is not None:
+			for cs in array:
+				if cs.ts >= since:
+					out.append(cs)
+		else:
+			raise AssertionError('since and until error')
+		return out
+
+	def array_validate (self, array, mode):
+		if len(array) <= 0:
+			return True
+		step = self.timesize[str(mode)]
+		if int(array[0].ts) % step != 0:
+			return False
+		for x in xrange(1, len(array)):
+			delta = array[x].ts - array[x - 1].ts
+			if delta != step:
+				return False
+		return True
+
+	def db_sync_array (self, db, symbol, array, mode, commit = True):
+		if not array:
+			return False
+		if not self.array_validate(array, mode):
+			return False
+		ctail = db.candle_pick(symbol, -1, mode)
+		if not ctail:
+			db.candle_write(symbol, array, mode, commit)
+		else:
+			out = []
+			for candle in array:
+				if candle.ts > ctail.ts:
+					out.append(candle)
+			db.candle_write(symbol, array, mode, commit)
+		return True
 
 
 #----------------------------------------------------------------------
 # useful functions
 #----------------------------------------------------------------------
-tools = ToolHelp()
+utils = ToolHelp()
 
 def connect(uri, init = False):
 	if uri.startswith('mysql://'):
@@ -1103,8 +1221,19 @@ if __name__ == '__main__':
 		for candle in cc.candle_read(sym2, 0, 0xffff):
 			print(candle)
 		return 0
-
-	test6()
+	def test7():
+		c1 = CandleStick(1, 2, 3)
+		c2 = CandleStick(2, 2, 3)
+		c3 = CandleStick(3, 2, 3)
+		c4 = c1
+		print(utils.compare(c1, c2))
+		print(utils.compare(c1, c3))
+		print(utils.compare(c1, c4))
+		array = [c1, c2, c3]
+		print()
+		print(utils.array_pick(array, 5))
+		print(utils.union(c1, c3))
+	test7()
 
 
 
