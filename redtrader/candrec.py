@@ -1124,7 +1124,6 @@ class ToolHelp (object):
 		self.db_timeframe_compile(db, symbol, 5, 30)
 		self.db_timeframe_compile(db, symbol, 30, 60)
 		self.db_timeframe_compile(db, symbol, 60, 'd')
-		self.db_timeframe_compile(db, symbol, 'd', 'w')
 		return 0
 
 
