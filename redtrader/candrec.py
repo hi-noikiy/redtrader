@@ -297,6 +297,8 @@ class CandleLite (object):
 		return self.__record2candle(record)
 
 	def candle_write (self, symbol, candles, mode = 'd', commit = True):
+		if len(candles) == 0:
+			return False
 		tabname = self.__get_candle_table(mode)
 		if isinstance(candles, CandleStick):
 			records = [ self.__candle2record(candles) ]
@@ -758,6 +760,8 @@ class CandleDB (object):
 		return self.__record2candle(record)
 
 	def candle_write (self, symbol, candles, mode = 'd', commit = True):
+		if len(candles) == 0:
+			return False
 		tabname = self.__get_candle_table(mode)
 		if isinstance(candles, CandleStick):
 			records = [ self.__candle2record(candles) ]
@@ -940,13 +944,35 @@ class ToolHelp (object):
 			return -1
 		return 0
 
-	def union (self, c1, c2):
-		c3 = c1 + c2
-		if isinstance(c3.volume, float):
-			v1 = decimal.Decimal(c1.volume)
-			v2 = decimal.Decimal(c2.volume)
-			c3.volume = float(v1 + v2)
-		return c3
+	def array_union (self, array):
+		if not array:
+			return None
+		if len(array) == 0:
+			return None
+		cc = None
+		volume = None
+		for cs in array:
+			if cc is None:
+				cc = cs
+				volume = decimal.Decimal(cs.volume)
+			else:
+				cc = cc + cs
+				volume = volume + decimal.Decimal(cs.volume)
+		if isinstance(cc.volume, float):
+			cc.volume = float(volume)
+		elif isinstance(cc.volume, decimal.Decimal):
+			cc.volume = volume
+		return cc
+
+	def candle_from_vector (self, vector):
+		if len(vector) in (5, 6):
+			return CandleStick(*vector)
+		raise TypeError('invalid vector')
+
+	def candle_to_vector (self, cs):
+		vector = ( int(cs.ts), float(cs.open), float(cs.high), float(cs.low),
+		float(cs.close), float(cs.volume), cs.extra )
+		return vector
 
 	def array_from_ccxt (self, ohlcv):
 		records = []
@@ -955,6 +981,16 @@ class ToolHelp (object):
 			records.append(cs)
 		self.array_sort(records)
 		return records
+
+	def array_from_list (self, rawlist):
+		records = []
+		for vector in rawlist:
+			records.append(self.candle_from_vector(vector))
+		return records
+
+	def array_to_list (self, array):
+		output = [ self.candle_to_vector(cs) for cs in array ]
+		return output
 
 	def array_sort (self, array, reverse = False):
 		array.sort(key = lambda x: x.ts, reverse = reverse)
@@ -1016,11 +1052,8 @@ class ToolHelp (object):
 		if len(array) <= 0:
 			return True
 		step = self.timesize[str(mode)]
-		if int(array[0].ts) % step != 0:
-			return False
-		for x in xrange(1, len(array)):
-			delta = array[x].ts - array[x - 1].ts
-			if delta != step:
+		for cs in array:
+			if cs.ts % step != 0:
 				return False
 		return True
 
@@ -1037,8 +1070,62 @@ class ToolHelp (object):
 			for candle in array:
 				if candle.ts > ctail.ts:
 					out.append(candle)
-			db.candle_write(symbol, array, mode, commit)
+			if not out:
+				return False
+			db.candle_write(symbol, out, mode, commit)
 		return True
+
+	def db_timeframe_compile (self, db, symbol, srcmode, dstmode):
+		srcint = self.timesize[str(srcmode)]
+		dstint = self.timesize[str(dstmode)]
+		ctail = db.candle_pick(symbol, -1, dstmode)
+		if dstint % srcint != 0:
+			return -1
+		times = dstint // srcint
+		chead = db.candle_pick(symbol, -2, srcmode)
+		clast = db.candle_pick(symbol, -1, srcmode)
+		if not ctail:
+			if not chead:
+				return 0
+			startts = ((chead.ts + dstint - 1) // dstint) * dstint
+		else:
+			startts = ((ctail.ts + dstint - 1) // dstint) * dstint + dstint
+		if not clast:
+			return 0
+		endts = (clast.ts // dstint) * dstint
+		if startts == endts:
+			return 0
+		array = db.candle_read(symbol, startts, endts, srcmode)
+		if not array:
+			return 0
+		select = {}
+		for cs in array:
+			key = (cs.ts // dstint) * dstint
+			if key not in select:
+				select[key] = []
+			select[key].append(cs)
+		output = []
+		for key in select:
+			items = select[key]
+			if len(items) != times:
+				continue
+			cs = self.array_union(items)
+			output.append(cs)
+		self.array_sort(output)
+		if not output:
+			return 0
+		# db.candle_write(symbol, output, dstmode)
+		self.db_sync_array(db, symbol, output, dstmode)
+		return len(output)
+
+	def db_timeframe_build (self, db, symbol):
+		self.db_timeframe_compile(db, symbol, 1, 5)
+		self.db_timeframe_compile(db, symbol, 1, 15)
+		self.db_timeframe_compile(db, symbol, 5, 30)
+		self.db_timeframe_compile(db, symbol, 30, 60)
+		self.db_timeframe_compile(db, symbol, 60, 'd')
+		self.db_timeframe_compile(db, symbol, 'd', 'w')
+		return 0
 
 
 #----------------------------------------------------------------------
@@ -1232,7 +1319,7 @@ if __name__ == '__main__':
 		array = [c1, c2, c3]
 		print()
 		print(utils.array_pick(array, 5))
-		print(utils.union(c1, c3))
+		print(utils.array_union((c1, c3)))
 	test7()
 
 
