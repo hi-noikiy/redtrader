@@ -608,8 +608,8 @@ class CandleDB (object):
 			CREATE TABLE IF NOT EXISTS `%s`.`meta` (
 			`name` VARCHAR(16) PRIMARY KEY NOT NULL UNIQUE,
 			`value` TEXT,
-			`ctime` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
-			`mtime` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00'
+			`ctime` DATETIME,
+			`mtime` DATETIME
 			)
 		'''%(database)
 
