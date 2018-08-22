@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/08/20 20:26
+# Last Modified: 2018/08/22 17:41
 #
 #======================================================================
 from __future__ import print_function
@@ -926,8 +926,6 @@ class ToolHelp (object):
 		self.timesize['60'] = 60 * 60
 		self.timesize['h'] = 3600
 		self.timesize['d'] = 3600 * 24
-		self.timesize['w'] = 3600 * 24 * 7
-		self.timesize['M'] = 3600 * 24 * 30
 
 	def compare (self, src, dst):
 		if src is dst:
@@ -977,7 +975,8 @@ class ToolHelp (object):
 	def array_from_ccxt (self, ohlcv):
 		records = []
 		for item in ohlcv:
-			cs = CandleStick(int(item[0] / 1000), *item[1:6])
+			t = [ float(n) for n in item[1:6] ]
+			cs = CandleStick(int(item[0] / 1000), *t)
 			records.append(cs)
 		self.array_sort(records)
 		return records
