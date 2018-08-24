@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/08/22 17:41
+# Last Modified: 2018/08/24 17:01
 #
 #======================================================================
 from __future__ import print_function
@@ -127,6 +127,7 @@ class CandleLite (object):
 		sqls.append(sql.replace('{name}', 'candle_15'))
 		sqls.append(sql.replace('{name}', 'candle_30'))
 		sqls.append(sql.replace('{name}', 'candle_60'))
+		sqls.append(sql.replace('{name}', 'candle_s'))
 		sqls.append(sql.replace('{name}', 'candle_d'))
 		sqls.append(sql.replace('{name}', 'candle_w'))
 		sqls.append(sql.replace('{name}', 'candle_m'))
@@ -178,6 +179,7 @@ class CandleLite (object):
 		self.__tabname['30'] = 'candle_30'
 		self.__tabname['60'] = 'candle_60'
 		self.__tabname['h'] = 'candle_60'
+		self.__tabname['s'] = 'candle_s'
 		self.__tabname['d'] = 'candle_d'
 		self.__tabname['w'] = 'candle_w'
 		self.__tabname['m'] = 'candle_m'
@@ -297,13 +299,13 @@ class CandleLite (object):
 		return self.__record2candle(record)
 
 	def candle_write (self, symbol, candles, mode = 'd', commit = True):
-		if len(candles) == 0:
-			return False
 		tabname = self.__get_candle_table(mode)
 		if isinstance(candles, CandleStick):
 			records = [ self.__candle2record(candles) ]
 		else:
 			records = [ self.__candle2record(candle) for candle in candles ]
+		if len(records) == 0:
+			return False
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s '%tabname
 		sql += '(symbol, ts, open, high, low, close, volume, extra)'
@@ -387,6 +389,8 @@ class CandleLite (object):
 			records = [ self.__tick2record(ticks) ]
 		else:
 			records = [ self.__tick2record(tick) for tick in ticks ]
+		if len(records) == 0:
+			return False
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s (symbol, ts, data) '%tabname
 		sql += ' VALUES (\'{}\', ?, ?);'.format(symbol)
@@ -524,6 +528,7 @@ class CandleDB (object):
 		self.__tabname['30'] = 'candle_30'
 		self.__tabname['60'] = 'candle_60'
 		self.__tabname['h'] = 'candle_60'
+		self.__tabname['s'] = 'candle_s'
 		self.__tabname['d'] = 'candle_d'
 		self.__tabname['w'] = 'candle_w'
 		self.__tabname['m'] = 'candle_m'
@@ -578,6 +583,7 @@ class CandleDB (object):
 		self.__conn.query(sql.replace('{name}', 'candle_15'))
 		self.__conn.query(sql.replace('{name}', 'candle_30'))
 		self.__conn.query(sql.replace('{name}', 'candle_60'))
+		self.__conn.query(sql.replace('{name}', 'candle_s'))
 		self.__conn.query(sql.replace('{name}', 'candle_d'))
 		self.__conn.query(sql.replace('{name}', 'candle_w'))
 		self.__conn.query(sql.replace('{name}', 'candle_m'))
@@ -760,13 +766,13 @@ class CandleDB (object):
 		return self.__record2candle(record)
 
 	def candle_write (self, symbol, candles, mode = 'd', commit = True):
-		if len(candles) == 0:
-			return False
 		tabname = self.__get_candle_table(mode)
 		if isinstance(candles, CandleStick):
 			records = [ self.__candle2record(candles) ]
 		else:
 			records = [ self.__candle2record(candle) for candle in candles ]
+		if len(records) == 0:
+			return False
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s'%tabname
 		sql += ' (symbol, ts, open, high, low, close, volume, extra)'
@@ -843,6 +849,8 @@ class CandleDB (object):
 			records = [ self.__tick2record(ticks) ]
 		else:
 			records = [ self.__tick2record(tick) for tick in ticks ]
+		if len(records) == 0:
+			return False
 		symbol = symbol.replace('\'', '').replace('"', '').replace('\\', '')
 		sql = 'REPLACE INTO %s (symbol, ts, data)'%tabname
 		sql += " values(\'{}\', %s, %s);".format(symbol)
@@ -1318,7 +1326,24 @@ if __name__ == '__main__':
 		print()
 		print(utils.array_pick(array, 5))
 		print(utils.array_union((c1, c3)))
-	test7()
+	def test8():
+		uri = 'mysql://skywind:000000@127.0.0.1/skywind_t2'
+		# uri = 'candrec.db'
+		cc = connect(uri, True)
+		cc.verbose = True
+		cc.candle_empty('ETH/USDT', 's')
+		c1 = CandleStick(1, 2, 3, 4, 5, 100, {'name': 'skywind'})
+		c2 = CandleStick(2, 2, 3, 4, 5, 100, 'haha')
+		c3 = CandleStick(3, 2, 3, 4, 5, 100)
+		hr = cc.candle_write('ETH/USDT', c1, 's')
+		hr = cc.candle_write('ETH/USDT', c2, 's')
+		hr = cc.candle_write('ETH/USDT', c2, 's')
+		hr = cc.candle_write('ETH/USDT', c3, 's')
+		print(hr)
+		for n in cc.candle_read('ETH/USDT', 0, 0xffffffff, 's'):
+			print(n)
+		return 0
+	test8()
 
 
 
