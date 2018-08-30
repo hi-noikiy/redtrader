@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/08/24 17:01
+# Last Modified: 2018/08/31 00:36
 #
 #======================================================================
 from __future__ import print_function
@@ -265,14 +265,14 @@ class CandleLite (object):
 			e = json.dumps(tick.obj)
 		return (tick.ts, e)
 
-	def candle_read (self, symbol, start, end, mode = 'd'):
+	def candle_read (self, symbol, start, size, mode = 'd'):
 		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from %s where symbol = ? '%tabname
-		sql += ' and ts >= ? and ts < ? order by ts;'
+		sql += ' and ts >= ? order by ts limit ?;'
 		record = []
 		c = self.__conn.cursor()
-		c.execute(sql, (symbol, start, end))
+		c.execute(sql, (symbol, start, size))
 		for obj in c.fetchall():
 			cs = self.__record2candle(obj)
 			if cs is not None:
@@ -322,6 +322,15 @@ class CandleLite (object):
 			self.__conn.commit()
 		return True
 
+	def candle_list (self, mode = 'd'):
+		tabname = self.__get_candle_table(mode)
+		c = self.__conn.cursor()
+		c.execute('SELECT symbol FROM %s GROUP BY symbol;'%tabname)
+		result = [ row[0] for row in c.fetchall() ]
+		c.close()
+		result.sort()
+		return result
+
 	def candle_erase (self, symbol, start, end, mode = 'd', commit = True):
 		tabname = self.__get_candle_table(mode)
 		sql = 'DELETE FROM %s WHERE symbol = ? and ts >= ? and ts < ?;'
@@ -351,13 +360,13 @@ class CandleLite (object):
 			return False
 		return True
 
-	def tick_read (self, symbol, start, end, mode = 1):
+	def tick_read (self, symbol, start, size, mode = 1):
 		tabname = self.__get_tick_table(mode)
 		sql = 'select ts, data from {} where symbol = ?'.format(tabname)
-		sql += ' and ts >= ? and ts < ? order by ts;'
+		sql += ' and ts >= ? order by ts limit ?;'
 		record = []
 		c = self.__conn.cursor()
-		c.execute(sql, (symbol, start, end))
+		c.execute(sql, (symbol, start, size))
 		for obj in c.fetchall():
 			tick = self.__record2tick(obj)
 			if tick is not None: 
@@ -405,6 +414,15 @@ class CandleLite (object):
 		if commit:
 			self.__conn.commit()
 		return True
+
+	def tick_list (self, mode = 1):
+		tabname = self.__get_tick_table(mode)
+		c = self.__conn.cursor()
+		c.execute('SELECT symbol FROM %s GROUP BY symbol;'%tabname)
+		result = [ row[0] for row in c.fetchall() ]
+		c.close()
+		result.sort()
+		return result
 
 	def tick_erase (self, symbol, start, end, mode = 1, commit = True):
 		tabname = self.__get_tick_table(mode)
@@ -733,14 +751,14 @@ class CandleDB (object):
 			e = json.dumps(tick.obj)
 		return (tick.ts, e)
 
-	def candle_read (self, symbol, start, end, mode = 'd'):
+	def candle_read (self, symbol, start, size, mode = 'd'):
 		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from {} where symbol = %s '.format(tabname)
-		sql += ' and ts >= %s and ts < %s order by ts;'
+		sql += ' and ts >= %s order by ts limit %s;'
 		record = []
 		with self.__conn as c:
-			c.execute(sql, (symbol, start, end))
+			c.execute(sql, (symbol, start, size))
 			for obj in c.fetchall():
 				cs = self.__record2candle(obj)
 				if cs is not None:
@@ -787,6 +805,16 @@ class CandleDB (object):
 			return False
 		return True
 
+	def candle_list (self, mode = 'd'):
+		tabname = self.__get_candle_table(mode)
+		symbols = []
+		with self.__conn as c:
+			c.execute('SELECT symbol FROM %s GROUP BY symbol;'%tabname)
+			for row in c.fetchall():
+				symbols.append(row[0])
+		symbols.sort()
+		return symbols
+
 	def candle_erase (self, symbol, start, end, mode = 'd', commit = True):
 		tabname = self.__get_candle_table(mode)
 		sql = 'DELETE FROM {} WHERE symbol = %s and ts >= %s and ts < %s;'
@@ -812,13 +840,13 @@ class CandleDB (object):
 			return False
 		return True
 
-	def tick_read (self, symbol, start, end, mode = 1):
+	def tick_read (self, symbol, start, size, mode = 1):
 		tabname = self.__get_tick_table(mode)
 		sql = 'select ts, data from {} where symbol = %s'.format(tabname)
-		sql += ' and ts >= %s and ts < %s order by ts;'
+		sql += ' and ts >= %s order by ts limit %s;'
 		record = []
 		with self.__conn as c:
-			c.execute(sql, (symbol, start, end))
+			c.execute(sql, (symbol, start, size))
 			for obj in c.fetchall():
 				tick = self.__record2tick(obj)
 				if tick is not None:
@@ -863,6 +891,16 @@ class CandleDB (object):
 			self.out(str(e))
 			return False
 		return True
+
+	def tick_list (self, mode = 1):
+		tabname = self.__get_tick_table(mode)
+		symbols = []
+		with self.__conn as c:
+			c.execute('SELECT symbol FROM %s GROUP BY symbol;'%tabname)
+			for row in c.fetchall():
+				symbols.append(row[0])
+		symbols.sort()
+		return symbols
 
 	def tick_erase (self, symbol, start, end, mode = 1, commit = True):
 		tabname = self.__get_tick_table(mode)
@@ -1331,6 +1369,7 @@ if __name__ == '__main__':
 		# uri = 'candrec.db'
 		cc = connect(uri, True)
 		cc.verbose = True
+		cc.decimal = 2
 		cc.candle_empty('ETH/USDT', 's')
 		c1 = CandleStick(1, 2, 3, 4, 5, 100, {'name': 'skywind'})
 		c2 = CandleStick(2, 2, 3, 4, 5, 100, 'haha')
@@ -1343,6 +1382,7 @@ if __name__ == '__main__':
 		for n in cc.candle_read('ETH/USDT', 0, 0xffffffff, 's'):
 			print(n)
 		return 0
+
 	test8()
 
 
