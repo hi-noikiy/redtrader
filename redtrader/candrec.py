@@ -1140,7 +1140,8 @@ class ToolHelp (object):
 		endts = (clast.ts // dstint) * dstint
 		if startts == endts:
 			return 0
-		array = db.candle_read(symbol, startts, endts, srcmode)
+		count = (clast.ts - startts) // srcint + 1
+		array = db.candle_read(symbol, startts, count, srcmode)
 		if not array:
 			return 0
 		select = {}
