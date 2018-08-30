@@ -271,6 +271,8 @@ class CandleLite (object):
 		sql += ' from %s where symbol = ? '%tabname
 		sql += ' and ts >= ? order by ts limit ?;'
 		record = []
+		if size <= 0:
+			return record
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, start, size))
 		for obj in c.fetchall():
@@ -365,6 +367,8 @@ class CandleLite (object):
 		sql = 'select ts, data from {} where symbol = ?'.format(tabname)
 		sql += ' and ts >= ? order by ts limit ?;'
 		record = []
+		if size <= 0:
+			return record
 		c = self.__conn.cursor()
 		c.execute(sql, (symbol, start, size))
 		for obj in c.fetchall():
@@ -757,6 +761,8 @@ class CandleDB (object):
 		sql += ' from {} where symbol = %s '.format(tabname)
 		sql += ' and ts >= %s order by ts limit %s;'
 		record = []
+		if size <= 0:
+			return record
 		with self.__conn as c:
 			c.execute(sql, (symbol, start, size))
 			for obj in c.fetchall():
@@ -845,6 +851,8 @@ class CandleDB (object):
 		sql = 'select ts, data from {} where symbol = %s'.format(tabname)
 		sql += ' and ts >= %s order by ts limit %s;'
 		record = []
+		if size <= 0:
+			return record
 		with self.__conn as c:
 			c.execute(sql, (symbol, start, size))
 			for obj in c.fetchall():
