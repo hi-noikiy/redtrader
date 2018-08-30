@@ -17,11 +17,19 @@ import datetime
 #----------------------------------------------------------------------
 # timezone
 #----------------------------------------------------------------------
-class timezone (datetime.tzinfo):
+class timezone(datetime.tzinfo):
+	"""Backport of datetime.timezone.
+	Notes
+	-----
+	Backport of datetime.timezone for Python 2.7, from Python 3.6
+	documentation (https://tinyurl.com/z4cegu9), copyright Python Software
+	Foundation (https://docs.python.org/3/license.html)
+	"""
 	__slots__ = '_offset', '_name'
 
 	# Sentinel value to disallow None
 	_Omitted = object()
+
 	def __new__(cls, offset, name=_Omitted):
 		if not isinstance(offset, datetime.timedelta):
 			raise TypeError("offset must be a timedelta")
@@ -30,22 +38,15 @@ class timezone (datetime.tzinfo):
 				return cls.utc
 			name = None
 		elif not isinstance(name, str):
-			###
-			# For Python-Future:
-			if sys.version_info[0] < 3 and isinstance(name, bytes):
-				name = name.decode()
-			else:
-				raise TypeError("name must be a string")
-			###
+			raise TypeError("name must be a string")
 		if not cls._minoffset <= offset <= cls._maxoffset:
-			raise ValueError("offset must be a timedelta"
-					" strictly between -timedelta(hours=24) and"
-					" timedelta(hours=24).")
-			if (offset.microseconds != 0 or
-					offset.seconds % 60 != 0):
-				raise ValueError("offset must be a timedelta"
-						" representing a whole number of minutes")
-				return cls._create(offset, name)
+			raise ValueError("offset must be a timedelta "
+							 "strictly between -timedelta(hours=24) and "
+							 "timedelta(hours=24).")
+		if (offset.microseconds != 0 or offset.seconds % 60 != 0):
+			raise ValueError("offset must be a timedelta "
+							 "representing a whole number of minutes")
+		return cls._create(offset, name)
 
 	@classmethod
 	def _create(cls, offset, name=None):
@@ -65,26 +66,24 @@ class timezone (datetime.tzinfo):
 			return False
 		return self._offset == other._offset
 
+	def __lt__(self, other):
+		raise TypeError("'<' not supported between instances of"
+						" 'datetime.timezone' and 'datetime.timezone'")
+
 	def __hash__(self):
 		return hash(self._offset)
 
 	def __repr__(self):
-		"""Convert to formal string, for repr().
-
-		>>> tz = timezone.utc
-		>>> repr(tz)
-		'datetime.timezone.utc'
-		>>> tz = timezone(timedelta(hours=-5), 'EST')
-		>>> repr(tz)
-		"datetime.timezone(datetime.timedelta(-1, 68400), 'EST')"
-		"""
 		if self is self.utc:
-			return 'datetime.timezone.utc'
+			return '%s.%s.utc' % (self.__class__.__module__,
+								  self.__class__.__name__)
 		if self._name is None:
-			return "%s(%r)" % ('datetime.' + self.__class__.__name__,
-							   self._offset)
-		return "%s(%r, %r)" % ('datetime.' + self.__class__.__name__,
-							   self._offset, self._name)
+			return "%s.%s(%r)" % (self.__class__.__module__,
+								  self.__class__.__name__,
+								  self._offset)
+		return "%s.%s(%r, %r)" % (self.__class__.__module__,
+								  self.__class__.__name__,
+								  self._offset, self._name)
 
 	def __str__(self):
 		return self.tzname(None)
@@ -93,44 +92,49 @@ class timezone (datetime.tzinfo):
 		if isinstance(dt, datetime.datetime) or dt is None:
 			return self._offset
 		raise TypeError("utcoffset() argument must be a datetime instance"
-				" or None")
+						" or None")
 
-		def tzname(self, dt):
-			if isinstance(dt, datetime.datetime) or dt is None:
-				if self._name is None:
-					return self._name_from_offset(self._offset)
+	def tzname(self, dt):
+		if isinstance(dt, datetime.datetime) or dt is None:
+			if self._name is None:
+				return self._name_from_offset(self._offset)
 			return self._name
 		raise TypeError("tzname() argument must be a datetime instance"
-				" or None")
+						" or None")
 
-		def dst(self, dt):
-			if isinstance(dt, datetime.datetime) or dt is None:
-				return None
+	def dst(self, dt):
+		if isinstance(dt, datetime.datetime) or dt is None:
+			return None
 		raise TypeError("dst() argument must be a datetime instance"
-				" or None")
+						" or None")
 
-		def fromutc(self, dt):
-			if isinstance(dt, datetime.datetime):
-				if dt.tzinfo is not self:
-					raise ValueError("fromutc: dt.tzinfo "
-							"is not self")
-					return dt + self._offset
+	def fromutc(self, dt):
+		if isinstance(dt, datetime.datetime):
+			if dt.tzinfo is not self:
+				raise ValueError("fromutc: dt.tzinfo "
+								 "is not self")
+			return dt + self._offset
 		raise TypeError("fromutc() argument must be a datetime instance"
-				" or None")
+						" or None")
 
 	_maxoffset = datetime.timedelta(hours=23, minutes=59)
 	_minoffset = -_maxoffset
 
 	@staticmethod
 	def _name_from_offset(delta):
+		if not delta:
+			return 'UTC'
 		if delta < datetime.timedelta(0):
 			sign = '-'
 			delta = -delta
 		else:
 			sign = '+'
-		hours, rest = divmod(delta, datetime.timedelta(hours=1))
-		minutes = rest // datetime.timedelta(minutes=1)
+		hours, rest = divmod(delta.total_seconds(), 3600)
+		hours = int(hours)
+		minutes = rest // datetime.timedelta(minutes=1).total_seconds()
+		minutes = int(minutes)
 		return 'UTC{}{:02d}:{:02d}'.format(sign, hours, minutes)
+
 
 timezone.utc = timezone._create(datetime.timedelta(0))
 timezone.min = timezone._create(timezone._minoffset)
@@ -195,6 +199,12 @@ tools = DateTool()
 #----------------------------------------------------------------------
 if __name__ == '__main__':
 	def test1():
+		ts = time.time()
+		uc = datetime.datetime.utcfromtimestamp(ts)
+		uc = tools.ts2datetime(ts, timezone.utc)
+		print(ts)
+		print(uc.tzinfo)
+		print(tools.datetime2ts(uc))
 		return 0
 	test1()
 
