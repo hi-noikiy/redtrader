@@ -1148,7 +1148,7 @@ class ToolHelp (object):
 		endts = (clast.ts // dstint) * dstint
 		if startts == endts:
 			return 0
-		count = (clast.ts - startts) // srcint + 1
+		count = (clast.ts - startts) // srcint + 1 + times
 		array = db.candle_read(symbol, startts, count, srcmode)
 		if not array:
 			return 0
