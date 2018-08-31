@@ -265,16 +265,20 @@ class CandleLite (object):
 			e = json.dumps(tick.obj)
 		return (tick.ts, e)
 
-	def candle_read (self, symbol, start, size, mode = 'd'):
+	def candle_read (self, symbol, start, end, mode = 'd', limit = None):
 		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from %s where symbol = ? '%tabname
-		sql += ' and ts >= ? order by ts limit ?;'
+		sql += ' and ts >= ? and ts < ? order by ts'
 		record = []
-		if size <= 0:
+		if start >= end:
 			return record
+		if limit is not None:
+			if limit <= 0:
+				return record
+			sql += ' limit %d'%limit
 		c = self.__conn.cursor()
-		c.execute(sql, (symbol, start, size))
+		c.execute(sql + ';', (symbol, start, end))
 		for obj in c.fetchall():
 			cs = self.__record2candle(obj)
 			if cs is not None:
@@ -362,15 +366,19 @@ class CandleLite (object):
 			return False
 		return True
 
-	def tick_read (self, symbol, start, size, mode = 1):
+	def tick_read (self, symbol, start, end, mode = 1, limit = None):
 		tabname = self.__get_tick_table(mode)
 		sql = 'select ts, data from {} where symbol = ?'.format(tabname)
-		sql += ' and ts >= ? order by ts limit ?;'
+		sql += ' and ts >= ? and ts < ? order by ts'
 		record = []
-		if size <= 0:
+		if start >= end:
 			return record
+		if limit is not None:
+			if limit <= 0:
+				return record
+			sql += ' limit %d'%limit
 		c = self.__conn.cursor()
-		c.execute(sql, (symbol, start, size))
+		c.execute(sql + ';', (symbol, start, end))
 		for obj in c.fetchall():
 			tick = self.__record2tick(obj)
 			if tick is not None: 
@@ -755,16 +763,20 @@ class CandleDB (object):
 			e = json.dumps(tick.obj)
 		return (tick.ts, e)
 
-	def candle_read (self, symbol, start, size, mode = 'd'):
+	def candle_read (self, symbol, start, end, mode = 'd', limit = None):
 		tabname = self.__get_candle_table(mode)
 		sql = 'select ts, open, high, low, close, volume, extra '
 		sql += ' from {} where symbol = %s '.format(tabname)
-		sql += ' and ts >= %s order by ts limit %s;'
+		sql += ' and ts >= %s and ts < %s order by ts'
 		record = []
-		if size <= 0:
+		if start >= end:
 			return record
+		if limit is not None:
+			if limit <= 0:
+				return record
+			sql += ' limit %d'%limit
 		with self.__conn as c:
-			c.execute(sql, (symbol, start, size))
+			c.execute(sql + ';', (symbol, start, end))
 			for obj in c.fetchall():
 				cs = self.__record2candle(obj)
 				if cs is not None:
@@ -846,15 +858,19 @@ class CandleDB (object):
 			return False
 		return True
 
-	def tick_read (self, symbol, start, size, mode = 1):
+	def tick_read (self, symbol, start, end, mode = 1, limit = None):
 		tabname = self.__get_tick_table(mode)
 		sql = 'select ts, data from {} where symbol = %s'.format(tabname)
-		sql += ' and ts >= %s order by ts limit %s;'
+		sql += ' and ts >= %s and ts < %s order by ts'
 		record = []
-		if size <= 0:
+		if start >= end:
 			return record
+		if limit is not None:
+			if limit <= 0:
+				return record
+			sql += ' limit %d'%limit
 		with self.__conn as c:
-			c.execute(sql, (symbol, start, size))
+			c.execute(sql + ';', (symbol, start, end))
 			for obj in c.fetchall():
 				tick = self.__record2tick(obj)
 				if tick is not None:
@@ -1148,8 +1164,7 @@ class ToolHelp (object):
 		endts = (clast.ts // dstint) * dstint
 		if startts == endts:
 			return 0
-		count = (clast.ts - startts) // srcint + 1 + times
-		array = db.candle_read(symbol, startts, count, srcmode)
+		array = db.candle_read(symbol, startts, endts, srcmode)
 		if not array:
 			return 0
 		select = {}
