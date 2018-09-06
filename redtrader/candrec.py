@@ -6,7 +6,7 @@
 # candrec.py - candle stick database
 #
 # Created by skywind on 2018/07/23
-# Last Modified: 2018/08/31 00:36
+# Last Modified: 2018/09/07 01:31
 #
 #======================================================================
 from __future__ import print_function
@@ -17,6 +17,7 @@ import io
 import codecs
 import decimal
 import sqlite3
+import datetime
 
 try:
 	import json
@@ -1126,6 +1127,63 @@ class ToolHelp (object):
 				return False
 		return True
 
+	def array_to_df (self, array):
+		import pandas
+		ts, open, high, low, close, volume = [], [], [], [], [], []
+		columns = ('ts', 'open', 'high', 'low', 'close', 'volume')
+		df = pandas.DataFrame(columns = columns, dtype = 'float')
+		for cs in array:
+			ts.append(cs.ts)
+			open.append(cs.open)
+			high.append(cs.high)
+			low.append(cs.low)
+			close.append(cs.close)
+			volume.append(cs.volume)
+		df['ts'] = ts
+		df['open'] = open
+		df['high'] = high
+		df['low'] = low
+		df['close'] = close
+		df['volume'] = volume
+		return df
+
+	def array_from_df (self, df):
+		ts = list(df['ts'])
+		open = list(df['open'])
+		high = list(df['high'])
+		low = list(df['low'])
+		close = list(df['close'])
+		volume = list(df['volume'])
+		array = []
+		for i, t in enumerate(ts):
+			cs = CandleStick(t, open[i], high[i], low[i], close[i], volume[i])
+			array.append(cs)
+		return array
+
+	# timestamp to utc datetime
+	def ts2datetime (self, ts):
+		return datetime.datetime.utcfromtimestamp(ts)
+		
+	# utc datetime to timestamp
+	def datetime2ts (self, dt):
+		if hasattr(dt, 'timestamp'):
+			return dt.timestamp()
+		epoch = datetime.datetime.fromtimestamp(0, dt.tzinfo)
+		return (dt - epoch).total_seconds()
+
+	# datetime to "YYYY-mm-dd HH:MM:SS"
+	def datetime2str (self, dt):
+		return dt.strftime(self.datefmt)
+
+	def str2datetime (self, text):
+		return datetime.datetime.strptime(text, self.datefmt)
+
+	def ts2str (self, ts):
+		return self.datetime2str(self.ts2datetime(ts))
+
+	def str2ts (self, text):
+		return self.datetime2ts(self.str2datetime(text))
+
 	def db_sync_array (self, db, symbol, array, mode, commit = True):
 		if not array:
 			return False
@@ -1390,7 +1448,7 @@ if __name__ == '__main__':
 		print(utils.array_union((c1, c3)))
 	def test8():
 		uri = 'mysql://skywind:000000@127.0.0.1/skywind_t2'
-		# uri = 'candrec.db'
+		uri = 'candrec.db'
 		cc = connect(uri, True)
 		cc.verbose = True
 		cc.decimal = 2
